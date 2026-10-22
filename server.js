@@ -22,7 +22,7 @@ const DEFAULT_INTERVALS = [
 const DBS = new Map();
 function fileFor(user) { return user ? path.join(DATA_DIR, 'data-' + crypto.createHash('sha256').update(user).digest('hex').slice(0, 24) + '.json') : DATA; }
 /*TRIAL3 3-day free trial. Data is never deleted; after the trial, data routes return 402 until paid.*/
-const TRIAL_DAYS = 3, PAYMENT_URL = process.env.PAYMENT_URL || '', HELP_EMAIL = 'beagortransp@gmail.com';
+const TRIAL_DAYS = 3, PAYMENT_URL = process.env.PAYMENT_URL || '', HELP_EMAIL = 'fleetlogsupport1@gmail.com';
 const OWNER_PAID = /^(1|true|yes)$/i.test(process.env.OWNER_PAID || ''); // exempts the owner (no-user / default) account
 function billing(db, user) {
   const paid = (db.billing && db.billing.status === 'paid') || (OWNER_PAID && !user);

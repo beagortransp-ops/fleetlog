@@ -13,7 +13,7 @@ Plain Node (>=18), no dependencies. Code only: no PIN, no data, no backups in th
 | `PAYMENT_URL` | link for the **Pay now** button on the trial-ended screen (optional; without it the button tells them to email support) |
 
 ## Free trial
-Each new account gets a 3-day trial (`trialStart` saved on first use; older accounts get it the first time they're seen). A small "Trial: X days left" bar shows during the trial. After 3 days, unless the account has `billing: {"status":"paid"}` in its data file (or is the owner with `OWNER_PAID=true`), data routes return **402** and the app shows a payment screen (help: beagortransp@gmail.com). The PIN screen, `/api/billing` and `/healthz` still work. Data is never deleted. To mark an account paid, add `"billing": {"status": "paid"}` to its data file and restart.
+Each new account gets a 3-day trial (`trialStart` saved on first use; older accounts get it the first time they're seen). A small "Trial: X days left" bar shows during the trial. After 3 days, unless the account has `billing: {"status":"paid"}` in its data file (or is the owner with `OWNER_PAID=true`), data routes return **402** and the app shows a payment screen (help: fleetlogsupport1@gmail.com). The PIN screen, `/api/billing` and `/healthz` still work. Data is never deleted. To mark an account paid, add `"billing": {"status": "paid"}` to its data file and restart.
 
 Wrong PINs are limited to 5 per 15 minutes per IP (HTTP 429). The PIN is only accepted in the `X-Pin` header (the app's sign-in screen); `?pin=` and `#pin=` links no longer work.
 Health check: `GET /healthz`.
