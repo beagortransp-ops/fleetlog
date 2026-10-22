@@ -31,7 +31,7 @@ const PLANS = [
   { id: 'pro', name: 'Pro', trucks: null, desc: 'Unlimited trucks · priority email support', monthly: 29.99, yearly: 299 }];
 const STRIPE_LINKS = { basic: { monthly: process.env.STRIPE_LINK_BASIC_MONTHLY || 'https://buy.stripe.com/4gMaEX4KVdgl54agam4F206', yearly: process.env.STRIPE_LINK_BASIC_YEARLY || 'https://buy.stripe.com/4gMaEX5OZ2BHgMSbU64F205' }, premium: { monthly: process.env.STRIPE_LINK_PREMIUM_MONTHLY || 'https://buy.stripe.com/4gMeVdfpz0tz68e7DQ4F207', yearly: process.env.STRIPE_LINK_PREMIUM_YEARLY || 'https://buy.stripe.com/6oU00ja5f1xD54a5vI4F208' }, pro: { monthly: process.env.STRIPE_LINK_PRO_MONTHLY || 'https://buy.stripe.com/7sY9AT0uF905dAG5vI4F209', yearly: process.env.STRIPE_LINK_PRO_YEARLY || 'https://buy.stripe.com/28E14nfpzgsx4061fs4F204' } };
 const ANY_LINK = Object.values(STRIPE_LINKS).some(o => o.monthly || o.yearly);
-const TEST_PAYMENTS = process.env.TEST_PAYMENTS ? /^(1|true|yes)$/i.test(process.env.TEST_PAYMENTS) : true;
+const TEST_PAYMENTS = process.env.TEST_PAYMENTS ? /^(1|true|yes)$/i.test(process.env.TEST_PAYMENTS) : false;
 function linkFor(plan, period, user) { const l = (STRIPE_LINKS[plan] || {})[period]; return l ? l + (l.includes('?') ? '&' : '?') + 'client_reference_id=' + encodeURIComponent(user || 'owner') : ''; }
 /*PLANLIMIT plan + truck limit. Trial (no plan) = no limit. Paid without a plan id (legacy/owner) = unlimited.*/
 function planOf(db, user) {
