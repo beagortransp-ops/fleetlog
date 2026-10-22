@@ -68,7 +68,7 @@ const DEFAULT_INTERVALS = [
 const DBS = new Map();
 function fileFor(user) { return user ? path.join(DATA_DIR, 'data-' + crypto.createHash('sha256').update(user).digest('hex').slice(0, 24) + '.json') : DATA; }
 /*TRIAL3 3-day free trial. Data is never deleted; after the trial, data routes return 402 until paid.*/
-const TRIAL_DAYS = 3, PAYMENT_URL = process.env.PAYMENT_URL || '', HELP_EMAIL = 'fleetlog.support@gmail.com';
+const TRIAL_DAYS = Number(process.env.TRIAL_DAYS || 0), /*NOTRIAL pay before use*/ PAYMENT_URL = process.env.PAYMENT_URL || '', HELP_EMAIL = 'fleetlog.support@gmail.com';
 const OWNER_PAID = /^(1|true|yes)$/i.test(process.env.OWNER_PAID || ''); // exempts the owner (no-user / default) account
 /*PLANS1 subscription plans – defined once, exposed via /api/billing as `plans`.*/
 const PLANS = [
