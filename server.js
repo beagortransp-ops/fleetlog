@@ -6,7 +6,53 @@ const KB = require('./kb.js'); /*KBASE1*/
 const PORT = process.env.PORT || 8790, DATA_DIR = path.resolve(process.env.DATA_DIR || path.join(__dirname, 'data')), DATA = path.join(DATA_DIR, 'data.json'), PUB = path.join(__dirname, 'public');
 fs.mkdirSync(DATA_DIR, { recursive: true });
 { const kc = path.join(DATA_DIR, 'kb-cache.json'), seed = path.join(__dirname, 'seed', 'kb-cache.json'); if (!fs.existsSync(kc) && fs.existsSync(seed)) fs.copyFileSync(seed, kc); }
-const PIN_HASH = String(process.env.PIN_HASH || '').trim().toLowerCase();
+const PIN_HASH = String(process.env.PIN_HASH || (f => { try { return fs.readFileSync(f, 'utf8'); } catch { return ''; } })(path.join(__dirname, 'pin.hash'))).trim().toLowerCase(); /*ACCTS1 PIN from env or pin.hash file (iMac copy)*/
+/*ACCTS1 customer accounts: users.json in DATA_DIR. Password = scrypt(salt). Session = random token in an httpOnly cookie; only its sha256 is stored.
+  Each account has its own store (data-<hash>.json). The legacy/default store (data.json) is adopted once by OWNER_EMAIL, or, when OWNER_EMAIL is unset,
+  by the first account created while data.json already has real (non-example) data. See ACCOUNTS.md.*/
+const OWNER_EMAIL = String(process.env.OWNER_EMAIL || '').trim().toLowerCase();
+const UFILE = path.join(DATA_DIR, 'users.json');
+const UDB = (() => { try { const d = JSON.parse(fs.readFileSync(UFILE, 'utf8')); d.users = d.users || []; d.sessions = d.sessions || {}; return d; } catch { return { users: [], sessions: {} }; } })();
+const usave = () => { fs.writeFileSync(UFILE + '.tmp', JSON.stringify(UDB, null, 2)); fs.renameSync(UFILE + '.tmp', UFILE); };
+const SESS_DAYS = 30, LFAILS = new Map(), LMAX = 8, LWIN = 15 * 60 * 1000;
+const sha = x => crypto.createHash('sha256').update(x).digest('hex');
+const hashPw = (pw, salt) => new Promise((ok, no) => crypto.scrypt(pw, salt, 64, (e, k) => e ? no(e) : ok(k.toString('hex'))));
+const cookieOf = req => Object.fromEntries(String(req.headers.cookie || '').split(';').map(x => x.trim().split('=')).filter(x => x[0]).map(([k, ...v]) => [k, decodeURIComponent(v.join('='))]));
+function sessUser(req) { const t = cookieOf(req).fl_sess; if (!t) return null; const s = UDB.sessions[sha(t)]; if (!s || s.exp < Date.now()) return null; return UDB.users.find(u => u.id === s.uid) || null; }
+const storeKey = u => u.legacy ? '' : u.id; // '' = legacy/default store (data.json); keeps ownerExempt for the owner
+const setCookie = (req, res, v, maxAge) => res.setHeader('Set-Cookie', `fl_sess=${v}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}` + ((req.socket.encrypted || /https/i.test(String(req.headers['x-forwarded-proto'] || ''))) ? '; Secure' : ''));
+const pubUser = u => ({ id: u.id, email: u.email, plan: u.plan, cycle: u.cycle, activePlan: u.activePlan, createdAt: u.createdAt, legacy: !!u.legacy });
+function legacyHasData() { try { const d = JSON.parse(fs.readFileSync(DATA, 'utf8')); return ['vehicles', 'services', 'parts'].some(c => (d[c] || []).some(x => !x.example)); } catch { return false; } }
+async function authRoute(req, res, b) {
+  const m = req.method;
+  if (b === 'me' && m === 'GET') { const u = sessUser(req); return u ? send(res, 200, pubUser(u)) : send(res, 401, { error: 'auth' }); }
+  if (b === 'logout' && m === 'POST') { const t = cookieOf(req).fl_sess; if (t) { delete UDB.sessions[sha(t)]; usave(); } setCookie(req, res, '', 0); return send(res, 200, { ok: true }); }
+  if ((b === 'signup' || b === 'login') && m === 'POST') {
+    const o = await body(req), email = String(o.email || '').trim().toLowerCase().slice(0, 200), pw = String(o.password || '');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return send(res, 400, { error: 'Enter a valid email.' });
+    if (pw.length < 8 || pw.length > 200) return send(res, 400, { error: 'Password must be at least 8 characters.' });
+    let u = UDB.users.find(x => x.email === email);
+    if (b === 'signup') {
+      if (u) return send(res, 409, { error: 'An account with this email already exists. Log in instead.' });
+      const salt = crypto.randomBytes(16).toString('hex');
+      const legacy = !UDB.users.some(x => x.legacy) && (OWNER_EMAIL ? email === OWNER_EMAIL : (UDB.users.length === 0 && legacyHasData()));
+      u = { id: crypto.randomUUID(), email, salt, pwHash: await hashPw(pw, salt), plan: 'trial', cycle: null, activePlan: 'trial', createdAt: new Date().toISOString(), ...(legacy ? { legacy: true } : {}) };
+      UDB.users.push(u); usave(); getDb(storeKey(u));
+    } else {
+      const k = ipOf(req) + '|' + email, now = Date.now(), f = (LFAILS.get(k) || []).filter(t => now - t < LWIN);
+      if (f.length >= LMAX) { LFAILS.set(k, f); res.setHeader('Retry-After', Math.ceil((LWIN - (now - f[0])) / 1000)); return send(res, 429, { error: 'Too many tries. Wait 15 minutes and try again.' }); }
+      const h = u ? await hashPw(pw, u.salt) : await hashPw(pw, 'x'.repeat(32));
+      if (!u || !safeEq(h, u.pwHash)) { f.push(now); LFAILS.set(k, f); return send(res, 401, { error: 'Wrong email or password.' }); }
+      LFAILS.delete(k);
+    }
+    const t = crypto.randomBytes(32).toString('hex'), now = Date.now();
+    for (const [k, s] of Object.entries(UDB.sessions)) if (s.exp < now) delete UDB.sessions[k];
+    UDB.sessions[sha(t)] = { uid: u.id, exp: now + SESS_DAYS * 864e5 }; usave();
+    setCookie(req, res, t, SESS_DAYS * 86400); return send(res, b === 'signup' ? 201 : 200, pubUser(u));
+  }
+  return send(res, 404, { error: 'no auth route' });
+}
+const syncPlan = (acct, db) => { if (!acct) return; const bl = db.billing; acct.plan = bl && bl.status === 'paid' ? bl.plan : 'trial'; acct.cycle = bl && bl.status === 'paid' ? (bl.cycle || bl.period || null) : null; acct.activePlan = acct.plan; usave(); }; /*ACCTS1 billing mirrored onto the account*/
 if (!PIN_HASH) console.warn('WARNING: PIN_HASH not set – API is open. Set it before going live.');
 const FAILS = new Map(), MAXF = 5, WIN = 15 * 60 * 1000; // wrong-PIN limit: 5 per 15 min per IP
 const ipOf = req => String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || '?';
@@ -17,7 +63,7 @@ const DEFAULT_INTERVALS = [
   ['Battery', null, 48], ['Transmission fluid', 60000, null], ['Coolant', 100000, 60], ['Air filter', 20000, 12],
   ['Spark plugs', 100000, null], ['DOT inspection', null, 12]].map(([category, miles, months]) => ({ id: crypto.randomUUID(), category, miles, months }));
 // Per-contractor data: each signed-in user gets their own file (data-<hash>.json). No user = demo (data.json).
-// NOTE: this local server trusts the X-User header; it separates data but is NOT a security boundary.
+// ACCTS1: the user now comes from the session cookie (see ACCOUNTS.md); X-User is ignored.
 // Real protection for shared cloud data = Supabase table with row-level security (see SETUP-SIGNIN.md).
 const DBS = new Map();
 function fileFor(user) { return user ? path.join(DATA_DIR, 'data-' + crypto.createHash('sha256').update(user).digest('hex').slice(0, 24) + '.json') : DATA; }
@@ -33,7 +79,7 @@ const STRIPE_LINKS = { basic: { monthly: process.env.STRIPE_LINK_BASIC_MONTHLY |
 const ANY_LINK = Object.values(STRIPE_LINKS).some(o => o.monthly || o.yearly);
 const TEST_PAYMENTS = process.env.TEST_PAYMENTS ? /^(1|true|yes)$/i.test(process.env.TEST_PAYMENTS) : false;
 const STRIPE_PORTAL_URL = process.env.STRIPE_PORTAL_URL || 'https://billing.stripe.com/p/login/aFabJ15OZekpdAG7DQ4F200'; /*LEGAL1 Stripe Customer Portal login link (Settings > Billing > Customer portal). Empty = in-app cancel request form.*/
-function linkFor(plan, period, user) { const l = (STRIPE_LINKS[plan] || {})[period]; return l ? l + (l.includes('?') ? '&' : '?') + 'client_reference_id=' + encodeURIComponent(user || 'owner') : ''; }
+function linkFor(plan, period, user) { const l = (STRIPE_LINKS[plan] || {})[period]; return l ? l + (l.includes('?') ? '&' : '?') + 'client_reference_id=' + encodeURIComponent(user || 'owner') /*ACCTS1 user = account id*/ : ''; }
 /*PLANLIMIT plan + truck limit. Trial (no plan) = no limit. Paid without a plan id (legacy/owner) = unlimited.*/
 function planOf(db, user) {
   const b = db.billing, paid = (b && b.status === 'paid') || (OWNER_PAID && !user);
@@ -125,13 +171,15 @@ http.createServer(async (req, res) => {
       FAILS.delete(ip);
     }
     const [, a, b] = p, m = req.method;
-    const user = String(req.headers['x-user'] || u.searchParams.get('u') || '').trim().toLowerCase().slice(0, 200);
-    const db = getDb(user);
+    if (a === 'auth') return authRoute(req, res, b); /*ACCTS1*/
+    const acct = sessUser(req); /*ACCTS1 user comes from the session cookie only; X-User is ignored*/
+    if (!acct) { if (a === 'billing' && m === 'GET' && !b) return send(res, 200, { ...billing({ vehicles: [], trialStart: new Date().toISOString() }, ''), ownerExempt: false, signedIn: false }); return send(res, 401, { error: 'auth' }); }
+    const user = storeKey(acct), db = getDb(user);
     if (a === 'billing' && b === 'consent' && m === 'POST') { /*LEGAL1 auto-renewal consent record (kept; never deleted)*/
       const o = await body(req), plan = PLANS.find(x => x.id === String(o.plan || '').toLowerCase()), cycle = o.cycle === 'yearly' ? 'yearly' : 'monthly';
       if (!plan) return send(res, 400, { error: 'plan must be basic|premium|pro' });
       db.consents = Array.isArray(db.consents) ? db.consents : [];
-      db.consents.push({ at: new Date().toISOString(), plan: plan.id, cycle, price: plan[cycle], version: String(o.version || '').slice(0, 40), text: String(o.text || '').slice(0, 600), ip: ipOf(req), user: user || null });
+      db.consents.push({ at: new Date().toISOString(), plan: plan.id, cycle, price: plan[cycle], version: String(o.version || '').slice(0, 40), text: String(o.text || '').slice(0, 600), ip: ipOf(req), user: acct.email });
       save(db); return send(res, 201, { ok: true });
     }
     if (a === 'billing' && b === 'test' && m === 'POST') { /*PLANS1 test checkout – before the 402 check, after the PIN check*/
@@ -139,7 +187,7 @@ http.createServer(async (req, res) => {
       const o = await body(req), plan = PLANS.find(x => x.id === o.plan), period = (o.period || o.cycle) === 'yearly' ? 'yearly' : (o.period || o.cycle || 'monthly') === 'monthly' ? 'monthly' : '';
       if (!plan || !period) return send(res, 400, { error: 'plan must be basic|premium|pro, period monthly|yearly' });
       const now = new Date(), r = new Date(now); if (period === 'yearly') r.setFullYear(r.getFullYear() + 1); else r.setMonth(r.getMonth() + 1);
-      db.billing = { status: 'paid', plan: plan.id, cycle: period, period, amount: plan[period], paidAt: now.toISOString(), test: true, renews: r.toISOString() }; save(db);
+      db.billing = { status: 'paid', plan: plan.id, cycle: period, period, amount: plan[period], paidAt: now.toISOString(), test: true, renews: r.toISOString() }; save(db); syncPlan(acct, db);
       return send(res, 200, billing(db, user));
     }
     if (a === 'billing' && b === 'paid' && m === 'POST') { /*PLANLIMIT Stripe Payment Link return (?paid=<plan>&cycle=<cycle>).
@@ -148,12 +196,12 @@ http.createServer(async (req, res) => {
       const o = await body(req), plan = PLANS.find(x => x.id === String(o.plan || '').toLowerCase()), cycle = o.cycle === 'yearly' ? 'yearly' : 'monthly';
       if (!plan) return send(res, 400, { error: 'plan must be basic|premium|pro' });
       const now = new Date(), r = new Date(now); if (cycle === 'yearly') r.setFullYear(r.getFullYear() + 1); else r.setMonth(r.getMonth() + 1);
-      db.billing = { status: 'paid', plan: plan.id, cycle, period: cycle, amount: plan[cycle], paidAt: now.toISOString(), renews: r.toISOString(), source: 'stripe-redirect' }; save(db);
+      db.billing = { status: 'paid', plan: plan.id, cycle, period: cycle, amount: plan[cycle], paidAt: now.toISOString(), renews: r.toISOString(), source: 'stripe-redirect' }; save(db); syncPlan(acct, db);
       return send(res, 200, billing(db, user));
     }
     if (a === 'billing' && b === 'test' && m === 'DELETE') {
       if (!TEST_PAYMENTS) return send(res, 403, { error: 'test payments disabled' });
-      delete db.billing; save(db); return send(res, 200, billing(db, user));
+      delete db.billing; save(db); syncPlan(acct, db); return send(res, 200, billing(db, user));
     }
     if (TEST_PAYMENTS && u.searchParams.get('testTrialEnd') === '1') { db.trialStart = new Date(Date.now() - 4 * 864e5).toISOString(); save(db); }
     if (a === 'billing') return send(res, 200, billing(db, user));

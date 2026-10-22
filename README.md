@@ -19,7 +19,7 @@ Plain Node (>=18), no dependencies. Code only: no PIN, no data, no backups in th
 ## Plans (defined once in `server.js` → `PLANS`, exposed by `/api/billing` as `plans`)
 | Plan | Monthly | Yearly | Trucks | Adds |
 |---|---|---|---|---|
-| Basic | $15.99 | $159 | up to 5 | core: service log, tires & parts, inspections, FedEx Monthly Record & VIR printing, reminders, phone access |
+| Basic | $15.99 | $159 | up to 5 | core: service log, tires & parts, inspections, Monthly Record & VIR printing, reminders, phone access |
 | Premium (most popular) | $19.99 | $199 | up to 15 | + all-trucks batch printing, cost dashboard by truck |
 | Pro | $24.99 | $249 | unlimited | + unlimited trucks, priority email support |
 
