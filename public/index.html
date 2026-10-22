@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><head><meta name="fl-version" content="20261021f"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<!doctype html><html lang="en"><head><meta name="fl-version" content="20261021n"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>FleetLog</title>
 <style>
 :root{--p:#4d148c;--o:#ff6200;--bg:#f5f5f7;--c:#fff;--b:#ddd;--red:#c62828;--amb:#e09000;--grn:#2e7d32}
@@ -119,20 +119,21 @@ body.virprint .virT td input{font-size:9px!important}body.virprint .virT tr>*:la
 .virCols{display:grid;grid-template-columns:1fr}@media print{#trialBar,#payBox{display:none!important}}@media print{/*SAFEPRINT*/html,body{height:auto!important;min-height:0!important;margin:0!important;padding:0!important;overflow:hidden!important}body>*:not(#app){display:none!important}#app>*:not(#mmrForm):not(#virForm){display:none!important}body:not(.virprint) #app>#virForm{display:none!important}body.virprint #app>#mmrForm{display:none!important}#app{min-height:0!important;height:auto!important}}</style></head><body>
 <header><h1><svg class="logo" viewBox="0 0 40 40" width="34" height="34" aria-label="Fleet Log logo"><defs><linearGradient id="flg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#141b6b"/><stop offset="1" stop-color="#4d148c"/></linearGradient></defs><rect width="40" height="40" rx="10" fill="url(#flg)"/><path d="M9 27a11 11 0 0 1 22 0" fill="none" stroke="#ffffff33" stroke-width="3.2" stroke-linecap="round"/><path d="M9 27a11 11 0 0 1 17.8-8.6" fill="none" stroke="#ff6200" stroke-width="3.2" stroke-linecap="round"/><path d="M20 27l6-8" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><circle cx="20" cy="27" r="2.6" fill="#fff"/></svg><!--GAUGELOGO--><span style="color:#4d148c;font-size:17px;font-weight:800">FleetLog</span></h1><nav id="nav"></nav></header>
 <main id="app"></main><div id="toast"><span id="tmsg"></span><button id="undo">Undo</button></div>
-<script src="config.js?v=20261021f"></script>
+<script src="config.js?v=20261021n"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="auth.js?v=20261021f"></script>
-<script src="logic.js?v=20261021f"></script>
+<script src="auth.js?v=20261021n"></script>
+<script src="logic.js?v=20261021n"></script>
 <script>
 // ===== Single data-access layer. Swap this object for on-device storage (Phase 2). =====
 /* hosted build: #pin= link login removed – enter the code on the sign-in screen */
 const API = {
   async req(method, url, data) {
     let tte = ''; if (/[?&]testTrialEnd=1/.test(location.search)) { tte = (url.includes('?') ? '&' : '?') + 'testTrialEnd=1'; history.replaceState(null, '', location.pathname + location.hash); } /*PLANS1 testing: force trial end*/
+    await paidReturn(); /*PLANLIMIT*/
     const r = await fetch('/api/' + url + tte, { method, headers: { 'Content-Type': 'application/json', 'X-User': AUTH.id(), 'X-Pin': localStorage.getItem('fmPin') || '' }, body: data ? JSON.stringify(data) : undefined });
     if (r.status === 401) { pinScreen(); throw new Error('Sign-in code needed'); }
     if (r.status === 402) { payScreen(await r.json().catch(() => ({}))); throw new Error('Trial ended'); }
-    const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status); return j;
+    const j = await r.json(); if (r.status === 403 && j.limit) { limitBox(j); throw new Error(j.error); } if (!r.ok) throw new Error(j.error || r.status); return j;
   },
   state: () => API.req('GET', 'state'),
   add: (col, rec) => API.req('POST', col, rec),
@@ -195,8 +196,24 @@ function render() {
   const card = (p, per) => `<div style="border:2px solid ${p.id === 'premium' ? '#4d148c' : '#dde'};border-radius:12px;padding:14px;text-align:left;background:#fff"><div style="font-weight:700;color:#4d148c">${p.name} · ${per === 'monthly' ? 'Monthly' : 'Yearly'}</div><div style="font-size:26px;font-weight:800;color:#141b6b">${money(p[per])}<span style="font-size:13px;color:#667;font-weight:500">/${per === 'monthly' ? 'mo' : 'yr'}</span></div><div style="font-size:13px;color:#445">${p.desc}${per === 'yearly' ? ' · save ' + money(p.monthly * 12 - p.yearly) : ''}</div>${btn(p, per)}</div>`;
   document.body.insertAdjacentHTML('beforeend', `<div id="payBox" style="position:fixed;inset:0;background:#f4f5fb;z-index:98;overflow:auto;padding:20px;font-family:system-ui,sans-serif"><div style="background:#fff;border-radius:16px;box-shadow:0 6px 30px #1a237e22;padding:24px;max-width:640px;margin:0 auto;text-align:center">${ended ? '' : '<button onclick="document.getElementById(\'payBox\').remove()" style="float:right;border:0;background:none;font-size:22px;cursor:pointer" aria-label="Close">✕</button>'}<div style="font-size:36px">🚚</div><h2 style="color:#141b6b;margin:6px 0">Plans &amp; billing</h2><p style="font-size:15px;color:#445">${status}</p><p style="font-size:13px;color:#2e7d32;background:#eef8ef;border-radius:8px;padding:6px">All your data stays saved – nothing is deleted, before or after the trial.</p>${b.testPayments ? '<p style="font-size:12px;color:#7a5200;background:#fff4dc;border-radius:8px;padding:6px">TEST MODE: "Test payment" buttons unlock the app without charging anything.</p>' : ''}<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:12px 0">${plans.map(p => card(p, 'monthly') + card(p, 'yearly')).join('')}</div>${b.testPayments && sub && sub.test ? '<button style="background:#fff;color:#b00020;border:1px solid #b00020;border-radius:8px;padding:7px 14px;cursor:pointer" onclick="payCancel()">Cancel test subscription</button>' : ''}<p style="font-size:13px;color:#667">Need help? <a href="mailto:${em}?subject=FleetLog%20subscription" style="color:#4d148c;font-weight:600">${em}</a></p></div></div>`);
 }
+/*PLANLIMIT Stripe Payment Link return: ?paid=basic|premium|pro&cycle=monthly|yearly.
+  No webhook yet – trust-on-redirect: the server records whatever plan the return URL names.*/
+let _paidP = null;
+function paidReturn() {
+  if (_paidP) return _paidP;
+  const q = new URLSearchParams(location.search), plan = (q.get('paid') || '').toLowerCase();
+  if (!['basic', 'premium', 'pro'].includes(plan)) return (_paidP = Promise.resolve());
+  const cycle = q.get('cycle') === 'yearly' ? 'yearly' : 'monthly';
+  history.replaceState(null, '', location.pathname + location.hash);
+  return (_paidP = fetch('/api/billing/paid', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-User': AUTH.id(), 'X-Pin': localStorage.getItem('fmPin') || '' }, body: JSON.stringify({ plan, cycle }) })
+    .then(r => r.json()).then(b => { window.FL_BILL = b; setTimeout(() => alert('Payment received – thank you! You are on the ' + (b.planName || plan) + ' plan (' + cycle + ').'), 300); }).catch(() => {}));
+}
+function planLabel() { const b = window.FL_BILL; if (!b) return ''; if (b.paid) return (b.planName || 'Paid') + ' plan' + (b.truckLimit ? ' · up to ' + b.truckLimit + ' trucks' : ' · unlimited trucks'); return b.active ? 'Trial – ' + b.daysLeft + ' day' + (b.daysLeft === 1 ? '' : 's') + ' left' : 'Trial ended'; }
+function planChip() { const t = planLabel(); return t ? `<a href="#" onclick="payScreen();return false" style="display:table;margin-top:6px;background:#fff;color:#4d148c;border-radius:999px;padding:2px 10px;font:600 12px system-ui;text-decoration:none">${esc(t)}</a>` : ''; }
+function limitBox(j) { const old = document.getElementById('limBox'); if (old) old.remove();
+  document.body.insertAdjacentHTML('beforeend', `<div id="limBox" style="position:fixed;inset:0;background:#0006;z-index:99;display:flex;align-items:center;justify-content:center;padding:20px"><div style="background:#fff;border-radius:14px;padding:22px;max-width:380px;text-align:center;font-family:system-ui"><div style="font-size:30px">🚚</div><h3 style="color:#141b6b;margin:6px 0">Truck limit reached</h3><p style="color:#445">Your ${esc(j.planName || '')} plan allows ${j.limit} trucks — upgrade to add more.</p><button class="b" onclick="document.getElementById('limBox').remove();payScreen(null,1)">Upgrade</button> <button class="b s" onclick="document.getElementById('limBox').remove()">Not now</button></div></div>`); }
 async function payPost(method, data) { const r = await fetch('/api/billing/test', { method, headers: { 'Content-Type': 'application/json', 'X-User': AUTH.id(), 'X-Pin': localStorage.getItem('fmPin') || '' }, body: data ? JSON.stringify(data) : undefined }); const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || r.status); return j; }
-async function payTest(plan, period) { try { const b = await payPost('POST', { plan, period }); document.getElementById('payBox').remove(); alert('Test payment done (no charge). FleetLog is unlocked.'); await refresh(); } catch (e) { alert('Test payment failed: ' + e.message); } }
+async function payTest(plan, period) { try { const b = await payPost('POST', { plan, period }); document.getElementById('payBox').remove(); alert('Test payment done (no charge). You are on the ' + ((b && b.planName) || plan) + ' plan.'); await refresh(); } catch (e) { alert('Test payment failed: ' + e.message); } }
 async function payCancel() { if (!confirm('Cancel the test subscription? Your data stays saved.')) return; try { const b = await payPost('DELETE'); await payScreen(b); trialBanner(); } catch (e) { alert(e.message); } }
 /*LANDINGPLANS*/ function landingExtras() {
   const ck = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2e7d32" stroke-width="3"><path d="M5 12l5 5L20 7"/></svg>';
@@ -219,7 +236,7 @@ async function payCancel() { if (!confirm('Cancel the test subscription? Your da
   <h2 class="lxs">Simple plans</h2><div class="lxg">${plans.map(card).join('')}</div>
   <div class="lxft"><a href="mailto:fleetlog.support@gmail.com?subject=FleetLog%20support">Need help?</a></div></div>`;
 } /*END LANDINGPLANS*/
-async function trialBanner() { try { const b = await API.req('GET', 'billing'); if (b.plans && JSON.stringify(b.plans) !== JSON.stringify(window.FL_PLANS)) { window.FL_PLANS = b.plans; if (tab === 'home' && !db.vehicles.length) render(); } const old = document.getElementById('trialBar'); if (old) old.remove(); if (b.paid || !b.active) return; document.body.insertAdjacentHTML('afterbegin', `<div id="trialBar" style="background:#fff4dc;color:#7a5200;text-align:center;font:600 13px system-ui;padding:5px">Trial: ${b.daysLeft} day${b.daysLeft === 1 ? '' : 's'} left · <a href="#" onclick="payScreen();return false" style="color:#4d148c">Plans &amp; billing</a></div>`); } catch (e) {} }
+async function trialBanner() { try { const b = await API.req('GET', 'billing'); { const ch = planLabel() !== (window.FL_BILL = b, planLabel()); if (ch && (tab === 'dash' || tab === 'settings')) render(); } if (b.plans && JSON.stringify(b.plans) !== JSON.stringify(window.FL_PLANS)) { window.FL_PLANS = b.plans; if (tab === 'home' && !db.vehicles.length) render(); } const old = document.getElementById('trialBar'); if (old) old.remove(); if (b.paid || !b.active) return; document.body.insertAdjacentHTML('afterbegin', `<div id="trialBar" style="background:#fff4dc;color:#7a5200;text-align:center;font:600 13px system-ui;padding:5px">Trial: ${b.daysLeft} day${b.daysLeft === 1 ? '' : 's'} left · <a href="#" onclick="payScreen();return false" style="color:#4d148c">Plans &amp; billing</a></div>`); } catch (e) {} }
 function pinScreen() {
   if (document.getElementById('pinBox')) return;
   document.body.insertAdjacentHTML('beforeend', `<div id="pinBox" style="position:fixed;inset:0;background:#fff;z-index:99;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;font-family:sans-serif"><h2>FleetLog sign-in</h2><input id="pinIn" type="password" inputmode="numeric" autocomplete="off" placeholder="Sign-in code" style="font-size:24px;padding:10px;width:220px;text-align:center"><button class="b" onclick="localStorage.setItem('fmPin', document.getElementById('pinIn').value.trim()); location.reload()">Sign in</button><div id="pinErr" style="color:#b00">${localStorage.getItem('fmPin') ? 'That code did not work.' : ''}</div></div>`);
@@ -430,7 +447,7 @@ const VIEWS = {
   dash() {
     const d = FleetLogic.dashboard(db), t = d.totals;
     const mN = new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' }); /*DASHPREM*/
-    return `<div class="dsh"><div class="hx"><div><div class="hxk">Fleet costs</div><h2>Dashboard</h2><span>${mN} · ${t.vehicles} vehicles</span></div><div class="hxr"><b>${money(t.last12Spend)}</b><span>spent, last 12 mo</span></div><div class="hxb"><i style="width:100%"></i></div></div>
+    return `<div class="dsh"><div class="hx"><div><div class="hxk">Fleet costs</div><h2>Dashboard</h2><span>${mN} · ${t.vehicles} vehicles</span>${planChip()}</div><div class="hxr"><b>${money(t.last12Spend)}</b><span>spent, last 12 mo</span></div><div class="hxb"><i style="width:100%"></i></div></div>
     <div class="kp dkp">${[['Vehicles', t.vehicles, '#1a237e'], ['Spend (12 mo)', money(t.last12Spend), '#4d148c'], ['Spend (all)', money(t.spend), '#6a1b9a'], ['Downtime days', t.downtimeDays, '#e65100'], ['Overdue', t.overdue, '#c62828'], ['Due soon', t.soon, '#e09000']].map(([k, v, c]) => `<div class="ks" style="color:${c}"><b style="color:${c}">${v}</b><span>${k}</span></div>`).join('')}</div>
     <div class="card"><h2>Monthly spend per truck (last 12 months)</h2>${d.perTruck.filter(p => p.last12Spend > 0).map(p => `<div><b>${esc(p.truck)}</b> — 12 mo ${money(p.last12Spend)} · downtime ${p.downtimeDays} days${bars(p, d.months)}</div>`).join('')}${(z => z.length ? `<details class="dz"><summary>${z.length} trucks with no spend in the last 12 months</summary><p>${z.map(p => esc(p.truck)).join(' · ')}</p></details>` : '')(d.perTruck.filter(p => !(p.last12Spend > 0)))}${d.perTruck.length ? '' : '<p>No vehicles yet. Add one or load example data in Settings.</p>'}</div>
     <div class="card"><h2>Downtime per truck</h2><table>${d.perTruck.map(p => `<tr><td>${esc(p.truck)}</td><td>${p.downtimeDays} days</td><td>${money(p.totalSpend)} total</td></tr>`).join('')}</table></div>
@@ -498,7 +515,7 @@ const VIEWS = {
     const I = db.intervals; /*SETPREM*/
     return `<div class="dsh svp"><div class="hx"><div><div class="hxk">App setup</div><h2>Settings</h2><span>Intervals &amp; data · ${db.vehicles.length} vehicles</span></div><div class="hxr"><b>${I.length}</b><span>intervals set</span></div><div class="hxb"><i style="width:100%"></i></div></div>
     <div class="kp dkp">${[['Intervals', I.length, '#4d148c'], ['By miles', I.filter(i => i.miles).length, '#1a237e'], ['By months', I.filter(i => i.months).length, '#e65100']].map(([k, v, c]) => `<div class="ks" style="color:${c}"><b style="color:${c}">${v}</b><span>${k}</span></div>`).join('')}</div>
-    <div class="card"><h2>Plans &amp; billing</h2><p style="font-size:13px;color:#555">Trial status, plans and payment. Your data always stays saved.</p><button class="b" onclick="payScreen()">Plans &amp; billing</button></div>
+    <div class="card"><h2>Plans &amp; billing</h2><p style="font-size:15px;font-weight:700;color:#4d148c;margin:4px 0">${esc(planLabel() || '…')}</p><p style="font-size:13px;color:#555">Trial status, plans and payment. Your data always stays saved.</p><button class="b" onclick="payScreen()">Plans &amp; billing</button></div>
     <div class="card"><h2>Maintenance intervals</h2><p style="font-size:13px;color:#555">Whichever comes first. Category must match the service category or part name.</p><table><tr><th>Category</th><th>Every miles</th><th>Every months</th><th></th></tr>${db.intervals.map(i => `<tr><td>${esc(i.category)}</td>
       <td><input autocomplete="off" type="number" value="${i.miles ?? ''}" onchange="act(API.update('intervals','${i.id}',{miles:this.value}))"></td><td><input autocomplete="off" type="number" value="${i.months ?? ''}" onchange="act(API.update('intervals','${i.id}',{months:this.value}))"></td><td><button class="x" onclick="del('intervals','${i.id}')">✕</button></td></tr>`).join('')}</table>
       <h3 style="font-size:14px">Add interval</h3><form autocomplete="off" data-col="intervals">${f('category', 'Category / part name', 'text', 'required')}${f('miles', 'Miles', 'number')}${f('months', 'Months', 'number')}<button class="b">Add</button></form></div>

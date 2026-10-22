@@ -33,11 +33,18 @@ const STRIPE_LINKS = { basic: { monthly: process.env.STRIPE_LINK_BASIC_MONTHLY |
 const ANY_LINK = Object.values(STRIPE_LINKS).some(o => o.monthly || o.yearly);
 const TEST_PAYMENTS = process.env.TEST_PAYMENTS ? /^(1|true|yes)$/i.test(process.env.TEST_PAYMENTS) : !ANY_LINK;
 function linkFor(plan, period, user) { const l = (STRIPE_LINKS[plan] || {})[period]; return l ? l + (l.includes('?') ? '&' : '?') + 'client_reference_id=' + encodeURIComponent(user || 'owner') : ''; }
+/*PLANLIMIT plan + truck limit. Trial (no plan) = no limit. Paid without a plan id (legacy/owner) = unlimited.*/
+function planOf(db, user) {
+  const b = db.billing, paid = (b && b.status === 'paid') || (OWNER_PAID && !user);
+  if (!paid) return null;
+  return PLANS.find(x => x.id === (b && b.plan)) || PLANS.find(x => x.id === 'pro');
+}
+const truckCount = db => db.vehicles.filter(v => !v.example).length;
 function billing(db, user) {
   const paid = (db.billing && db.billing.status === 'paid') || (OWNER_PAID && !user);
   const start = Date.parse(db.trialStart) || Date.now(), end = start + TRIAL_DAYS * 864e5, now = Date.now();
   const plans = PLANS.map(p => ({ ...p, links: { monthly: linkFor(p.id, 'monthly', user), yearly: linkFor(p.id, 'yearly', user) } }));
-  return { paid: !!paid, trialStart: db.trialStart, trialEnds: new Date(end).toISOString(), daysLeft: paid ? null : Math.max(0, Math.ceil((end - now) / 864e5)), active: !!paid || now < end, paymentUrl: PAYMENT_URL, email: HELP_EMAIL, plans, testPayments: TEST_PAYMENTS, subscription: db.billing || null, ownerExempt: !!(OWNER_PAID && !user) };
+  return { paid: !!paid, trialStart: db.trialStart, trialEnds: new Date(end).toISOString(), daysLeft: paid ? null : Math.max(0, Math.ceil((end - now) / 864e5)), active: !!paid || now < end, paymentUrl: PAYMENT_URL, email: HELP_EMAIL, plans, testPayments: TEST_PAYMENTS, subscription: db.billing || null, ownerExempt: !!(OWNER_PAID && !user), ...(pl => ({ plan: pl ? pl.id : null, planName: pl ? pl.name : null, cycle: (db.billing && (db.billing.cycle || db.billing.period)) || null, truckLimit: pl ? pl.trucks : null, trucks: truckCount(db) }))(planOf(db, user)) };
 }
 function getDb(user) {
   const f = fileFor(user);
@@ -98,10 +105,19 @@ http.createServer(async (req, res) => {
     const db = getDb(user);
     if (a === 'billing' && b === 'test' && m === 'POST') { /*PLANS1 test checkout – before the 402 check, after the PIN check*/
       if (!TEST_PAYMENTS) return send(res, 403, { error: 'test payments disabled' });
-      const o = await body(req), plan = PLANS.find(x => x.id === o.plan), period = o.period === 'yearly' ? 'yearly' : o.period === 'monthly' ? 'monthly' : '';
+      const o = await body(req), plan = PLANS.find(x => x.id === o.plan), period = (o.period || o.cycle) === 'yearly' ? 'yearly' : (o.period || o.cycle || 'monthly') === 'monthly' ? 'monthly' : '';
       if (!plan || !period) return send(res, 400, { error: 'plan must be basic|premium|pro, period monthly|yearly' });
       const now = new Date(), r = new Date(now); if (period === 'yearly') r.setFullYear(r.getFullYear() + 1); else r.setMonth(r.getMonth() + 1);
-      db.billing = { status: 'paid', plan: plan.id, period, amount: plan[period], paidAt: now.toISOString(), test: true, renews: r.toISOString() }; save(db);
+      db.billing = { status: 'paid', plan: plan.id, cycle: period, period, amount: plan[period], paidAt: now.toISOString(), test: true, renews: r.toISOString() }; save(db);
+      return send(res, 200, billing(db, user));
+    }
+    if (a === 'billing' && b === 'paid' && m === 'POST') { /*PLANLIMIT Stripe Payment Link return (?paid=<plan>&cycle=<cycle>).
+      NOTE: there is NO Stripe webhook yet – this is trust-on-redirect: whoever opens the return URL gets the plan recorded.
+      Fine for now; add a Stripe webhook (checkout.session.completed) before relying on it for real money.*/
+      const o = await body(req), plan = PLANS.find(x => x.id === String(o.plan || '').toLowerCase()), cycle = o.cycle === 'yearly' ? 'yearly' : 'monthly';
+      if (!plan) return send(res, 400, { error: 'plan must be basic|premium|pro' });
+      const now = new Date(), r = new Date(now); if (cycle === 'yearly') r.setFullYear(r.getFullYear() + 1); else r.setMonth(r.getMonth() + 1);
+      db.billing = { status: 'paid', plan: plan.id, cycle, period: cycle, amount: plan[cycle], paidAt: now.toISOString(), renews: r.toISOString(), source: 'stripe-redirect' }; save(db);
       return send(res, 200, billing(db, user));
     }
     if (a === 'billing' && b === 'test' && m === 'DELETE') {
@@ -161,6 +177,8 @@ http.createServer(async (req, res) => {
         const rec = { id: crypto.randomUUID(), ...clean(await body(req)) };
         if (a !== 'vehicles' && a !== 'intervals' && a !== 'profile' && !db.vehicles.some(v => v.id === rec.vehicleId)) return send(res, 400, { error: 'vehicleId required' });
         if (a === 'vehicles' && !rec.truck) return send(res, 400, { error: 'truck # required' });
+        if (a === 'vehicles' && !rec.example) { const pl = planOf(db, user); /*PLANLIMIT*/
+          if (pl && pl.trucks != null && truckCount(db) >= pl.trucks) return send(res, 403, { error: `Your ${pl.name} plan allows ${pl.trucks} trucks. Upgrade to add more.`, limit: pl.trucks, plan: pl.id, planName: pl.name }); }
         if (a === 'quotes' && rec.chosen) db.quotes.forEach(q => { if (q.vehicleId === rec.vehicleId && q.job === rec.job) q.chosen = false; });
         db[a].push(rec); bumpMileage(db, rec); save(db); return send(res, 201, rec);
       }
