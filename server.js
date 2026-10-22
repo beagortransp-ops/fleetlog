@@ -28,7 +28,7 @@ const OWNER_PAID = /^(1|true|yes)$/i.test(process.env.OWNER_PAID || ''); // exem
 const PLANS = [
   { id: 'basic', name: 'Basic', trucks: 5, desc: 'Up to 5 trucks', monthly: 15.99, yearly: 159 },
   { id: 'premium', name: 'Premium', trucks: 15, desc: 'Up to 15 trucks · batch printing · cost dashboard', monthly: 19.99, yearly: 199, popular: true },
-  { id: 'pro', name: 'Pro', trucks: null, desc: 'Unlimited trucks · priority email support', monthly: 24.99, yearly: 249 }];
+  { id: 'pro', name: 'Pro', trucks: null, desc: 'Unlimited trucks · priority email support', monthly: 29.99, yearly: 299 }];
 const STRIPE_LINKS = { basic: { monthly: process.env.STRIPE_LINK_BASIC_MONTHLY || 'https://buy.stripe.com/test_4gM4gzb2M1j5c0wgYU5sA02', yearly: process.env.STRIPE_LINK_BASIC_YEARLY || 'https://buy.stripe.com/test_aFa00j5Isd1N8OkdMI5sA03' }, premium: { monthly: process.env.STRIPE_LINK_PREMIUM_MONTHLY || 'https://buy.stripe.com/28E14n2CNa497ci8HU4F201', yearly: process.env.STRIPE_LINK_PREMIUM_YEARLY || 'https://buy.stripe.com/aFabJ15OZekpdAG7DQ4F200' }, pro: { monthly: process.env.STRIPE_LINK_PRO_MONTHLY || 'https://buy.stripe.com/7sYaEXa5fdglcwC2jw4F203', yearly: process.env.STRIPE_LINK_PRO_YEARLY || 'https://buy.stripe.com/28E14nfpzgsx4061fs4F204' } };
 const ANY_LINK = Object.values(STRIPE_LINKS).some(o => o.monthly || o.yearly);
 const TEST_PAYMENTS = process.env.TEST_PAYMENTS ? /^(1|true|yes)$/i.test(process.env.TEST_PAYMENTS) : true;
