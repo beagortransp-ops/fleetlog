@@ -1,4 +1,4 @@
-// ================== SIGN-IN SETTINGS (Sergio fills these in) ==================
+// ================== SIGN-IN SETTINGS (owner fills these in) ==================
 // Paste from Supabase: Project Settings > API (or "Connect").
 //   SUPABASE_URL      = Project URL, looks like https://abcdefgh.supabase.co
 //   SUPABASE_ANON_KEY = the PUBLIC key: "anon public" (eyJ...) or "Publishable" (sb_publishable_...)

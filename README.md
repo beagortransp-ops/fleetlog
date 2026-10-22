@@ -9,7 +9,7 @@ Plain Node (>=18), no dependencies. Code only: no PIN, no data, no backups in th
 | `DATA_DIR` | where `data.json` and `kb-cache.json` live (`/var/data` on Render; default `./data`) |
 | `PIN_HASH` | SHA-256 hex of the PIN – same format as the old `pin.hash` file. Unset = no PIN (local testing only) |
 
-| `OWNER_PAID` | `true` = the owner/default account (no signed-in user) is never locked by the trial. Set on Sergio's own instance. |
+| `OWNER_PAID` | `true` = the owner/default account (no signed-in user) is never locked by the trial. Set on the owner's own instance. |
 | `PAYMENT_URL` | legacy single pay link (kept for compatibility; plan links below are preferred) |
 | `STRIPE_LINK_BASIC_MONTHLY` / `STRIPE_LINK_BASIC_YEARLY` | Stripe Payment Link URLs for Basic |
 | `STRIPE_LINK_PREMIUM_MONTHLY` / `STRIPE_LINK_PREMIUM_YEARLY` | Stripe Payment Link URLs for Premium |

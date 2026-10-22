@@ -1,4 +1,4 @@
-// KBASE1 – Costa Fleet knowledge base helpers. Data: NHTSA vPIC/recalls/manufacturer communications (public, free), OBDex generic DTCs (CC0).
+// KBASE1 – FleetLog knowledge base helpers. Data: NHTSA vPIC/recalls/manufacturer communications (public, free), OBDex generic DTCs (CC0).
 const fs = require('fs'), path = require('path');
 const CACHE = path.join(path.resolve(process.env.DATA_DIR || path.join(__dirname, 'data')), 'kb-cache.json'), DTC = path.join(__dirname, 'dtc-obdex.json');
 let K = null;
@@ -17,7 +17,7 @@ function overview(db, K) {
     g.vehicles.push({ year: i.year, model: `${i.make[0] + i.make.slice(1).toLowerCase()} ${i.model}${i.series ? ' ' + i.series : ''}`, vin: v.vin || '' }); }
   const fixes = [...seeded(db, K), ...(db.kbFixes || [])];
   const list = Object.values(groups).sort((a, b) => a.year.localeCompare(b.year) || a.group.localeCompare(b.group)).map(g => ({ ...g, recalls: K.recalls[g.rkey] || [], bulletinCount: K.bulletins.filter(b => b.make === g.make && b.model.toUpperCase() === (ALIAS[g.model] || g.model).toUpperCase() && b.years.includes(g.year)).length, fixes: fixes.filter(f => f.group === g.group) }));
-  return { shop: 'Costa Fleet', builtAt: K.builtAt, recallsAt: K.recallsAt || K.builtAt, groups: list, bulletins: K.bulletins, dtcCount: Object.keys(K.dtc).length };
+  return { shop: 'FleetLog', builtAt: K.builtAt, recallsAt: K.recallsAt || K.builtAt, groups: list, bulletins: K.bulletins, dtcCount: Object.keys(K.dtc).length };
 }
 const txt = o => Object.values(o).join(' ').toLowerCase();
 function shopHits(db, K, code) { if (!code) return []; const re = new RegExp('\\b' + code + '\\b', 'i'); return [...seeded(db, K), ...(db.kbFixes || [])].filter(f => re.test([f.code, f.symptom, f.fix, f.parts, f.notes].join(' '))); }
@@ -33,7 +33,7 @@ function search(db, K, q) {
 async function refresh(db) { // re-pull NHTSA recalls for the fleet's make/model/year
   const k = load(), keys = [...new Set(db.vehicles.filter(isFleet).map(v => info(k, v).rkey))]; const out = {}, errs = [];
   for (const key of keys) { const [y, mk, md] = key.split('|');
-    try { const r = await fetch('https://api.nhtsa.gov/recalls/recallsByVehicle?' + new URLSearchParams({ make: mk, model: md, modelYear: y }), { headers: { 'User-Agent': 'Mozilla/5.0 CostaFleet' } }); const j = r.ok ? await r.json() : { results: [] };
+    try { const r = await fetch('https://api.nhtsa.gov/recalls/recallsByVehicle?' + new URLSearchParams({ make: mk, model: md, modelYear: y }), { headers: { 'User-Agent': 'Mozilla/5.0 FleetLog' } }); const j = r.ok ? await r.json() : { results: [] };
       out[key] = (j.results || []).map(x => ({ NHTSACampaignNumber: x.NHTSACampaignNumber, ReportReceivedDate: x.ReportReceivedDate, Component: x.Component, Summary: x.Summary, Remedy: x.Remedy, parkIt: x.parkIt, parkOutSide: x.parkOutSide })); } catch (e) { errs.push(key); out[key] = k.recalls[key] || []; } }
   k.recalls = { ...k.recalls, ...out }; k.recallsAt = new Date().toISOString().slice(0, 10);
   const { dtc, ...disk } = k; fs.writeFileSync(CACHE + '.tmp', JSON.stringify(disk)); fs.renameSync(CACHE + '.tmp', CACHE);

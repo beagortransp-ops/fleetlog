@@ -179,7 +179,7 @@ http.createServer(async (req, res) => {
       }
       db.inspections.push(rec); bumpMileage(db, rec); save(db); return send(res, 201, rec);
     }
-    if (a === 'kb') { /*KBASE1 Costa Fleet knowledge base: NHTSA public data + OBDex CC0 codes + shop's own notes. No ALLDATA/Ford content.*/
+    if (a === 'kb') { /*KBASE1 FleetLog knowledge base: NHTSA public data + OBDex CC0 codes + shop's own notes. No ALLDATA/Ford content.*/
       const K = KB.load(), c = p[2], q = String(u.searchParams.get('q') || '').trim();
       if (!c && m === 'GET') return send(res, 200, KB.overview(db, K));
       if (c === 'dtc' && m === 'GET') { const code = String(p[3] || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6); return send(res, 200, { code, info: K.dtc[code] || null, shop: KB.shopHits(db, K, code) }); }
