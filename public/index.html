@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><head><meta name="fl-version" content="20261021o"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<!doctype html><html lang="en"><head><meta name="fl-version" content="20261021p"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>FleetLog</title>
 <style>
 :root{--p:#4d148c;--o:#ff6200;--bg:#f5f5f7;--c:#fff;--b:#ddd;--red:#c62828;--amb:#e09000;--grn:#2e7d32}
@@ -127,10 +127,10 @@ body.virprint .virT td:first-child{font-size:9.5px!important;line-height:1.15!im
 #trialBar,#payBox,#nav,.supmail,button{display:none!important}}</style></head><body>
 <header><h1><svg class="logo" viewBox="0 0 40 40" width="34" height="34" aria-label="Fleet Log logo"><defs><linearGradient id="flg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#141b6b"/><stop offset="1" stop-color="#4d148c"/></linearGradient></defs><rect width="40" height="40" rx="10" fill="url(#flg)"/><path d="M9 27a11 11 0 0 1 22 0" fill="none" stroke="#ffffff33" stroke-width="3.2" stroke-linecap="round"/><path d="M9 27a11 11 0 0 1 17.8-8.6" fill="none" stroke="#ff6200" stroke-width="3.2" stroke-linecap="round"/><path d="M20 27l6-8" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><circle cx="20" cy="27" r="2.6" fill="#fff"/></svg><!--GAUGELOGO--><span style="color:#4d148c;font-size:17px;font-weight:800">FleetLog</span></h1><nav id="nav"></nav></header>
 <main id="app"></main><div id="toast"><span id="tmsg"></span><button id="undo">Undo</button></div>
-<script src="config.js?v=20261021o"></script>
+<script src="config.js?v=20261021p"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="auth.js?v=20261021o"></script>
-<script src="logic.js?v=20261021o"></script>
+<script src="auth.js?v=20261021p"></script>
+<script src="logic.js?v=20261021p"></script>
 <script>
 // ===== Single data-access layer. Swap this object for on-device storage (Phase 2). =====
 /* hosted build: #pin= link login removed – enter the code on the sign-in screen */
@@ -417,8 +417,8 @@ const VIEWS = {
     ${f('Maintenance Record for the Month and Year of:', '', true) /*MMRCLEAN*/}${f('Domicile Station/Hub:', esc(((db.profile || [])[0] || {}).hub || ''), 'hub')}
     ${f('Service Provider Company Name:', esc(((db.profile || [])[0] || {}).company || ''), 'company')}${f('Current Mileage* (Odometer Reading):', miles ? String(Number(miles)) : '')}
     ${f('Vehicle Unit #:', esc(v.truck || ''))}<div style="font-size:8px;padding-top:2px">*If reading has decreased due to odometer repair/replacement, proof should also be provided. If unit is undergoing repair and unavailable, "N/A" may be utilized for current mileage.</div></div>
-    ${yn('Were any repairs, or preventative maintenance performed on this unit?', rows.length > 0, 'rep')}
-    ${yn('If "no" maintenance was performed, was the unit out of service and unable to provide service (i.e., awaiting repair, on litigation hold, etc.)?', false, 'oos')}
+    ${yn('Were any repairs, or preventative maintenance performed on this unit?', undefined, 'rep')}
+    ${yn('If "no" maintenance was performed, was the unit out of service and unable to provide service (i.e., awaiting repair, on litigation hold, etc.)?', undefined, 'oos')}
     <p style="margin:6px 0 4px">All repairs/replacements, or maintenance performed in conformance with a vehicle's Maintenance Interval Form or any other major vehicle system must be reported on an MMR with detailed notations or attached receipts.</p>
     <p style="margin:0 0 4px">All notations must provide enough detail for a DOT official to determine what component(s), location(s), and type of work was performed (e.g., replace, repair, adjust, etc.).</p>
     <p style="margin:0 0 4px">Annual Federal/State and Pre/Post trip inspections must not be reported on the MMR, however repairs and maintenance of components that resulted from these inspections must be reported on an MMR.</p>
@@ -426,7 +426,7 @@ const VIEWS = {
     <table style="width:100%;border-collapse:collapse;font-size:10.5px"><tr><th style="${td};text-align:left;width:32%">Date of Maintenance</th><th style="${td};text-align:left">Specific Description of Maintenance Performed</th></tr>
     ${list.map(r => `<tr><td style="${td}">${r ? r.date : ''}</td><td style="${td}">${r ? esc([r.category, r.parts, r.notes].filter(Boolean).join(' — ')) /*MONTHLYTRIM: per-row miles removed*/ : ''}</td></tr>`).join('')}</table>
     
-    <div style="display:flex;gap:10px;margin:10px 0"><div>${ck(true)}</div><div>By checking this box, I declare that this record is true and correct. Unless otherwise clearly indicated as "out of service" on this record, I confirm that the equipment on this record is in compliance with the Federal Motor Carrier Safety Regulations 49 C.F.R. 396.3(a)(1) and 396.7 (a) and is in safe operating condition and meets all federal, state and local motor vehicle laws. Furthermore, I confirm that preventative maintenance is consistent with the interval schedule per 396.3(b)(2).</div></div>
+    <div style="display:flex;gap:10px;margin:10px 0"><div>${ck(false) /*MMRUNCHK*/}</div><div>By checking this box, I declare that this record is true and correct. Unless otherwise clearly indicated as "out of service" on this record, I confirm that the equipment on this record is in compliance with the Federal Motor Carrier Safety Regulations 49 C.F.R. 396.3(a)(1) and 396.7 (a) and is in safe operating condition and meets all federal, state and local motor vehicle laws. Furthermore, I confirm that preventative maintenance is consistent with the interval schedule per 396.3(b)(2).</div></div>
     <div style="display:grid;grid-template-columns:3fr 2fr;gap:30px">${f('Signature of Authorized Officer or Business Contact:', ((db.profile || [])[0] || {}).sig ? `<div class="sigw"><img src="${db.profile[0].sig}" class="sigi"><button class="sigc" onclick="saveProf('sig','')">Clear</button></div>` : `<div class="sigw"><canvas id="sigpad" class="sigp"></canvas><span class="sigh">Sign here with finger or mouse</span><button class="sigc" onclick="sigSave()">Save signature</button></div>${(setTimeout(initSig, 0), '')}`, true)}${f('Date Completed:', '', true)}</div>
     <p style="font-style:italic;font-size:8.5px;margin:12px 0 4px">* The Monthly Maintenance Record (MMR) is FedEx's systematic method of obtaining vehicle maintenance records for service provider-owned vehicles in compliance with the Federal Motor Carrier Safety Regulations which require motor carriers to have a systematic method of causing vehicles operating under their motor carrier operating authority to be repaired and maintained. Therefore, if FedEx does not receive records for a vehicle by the 20th of the month following the month in which maintenance or repairs were performed, packages will not be made available to this vehicle.</p>
     <div style="border-top:1px solid #333;display:flex;justify-content:space-between;font-size:9px;padding-top:2px"><span>This form for service providers is accessed through mybizaccount.fedex.com</span><span>Page 1 of 1</span></div></div>`;
