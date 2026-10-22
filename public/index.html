@@ -401,7 +401,7 @@ const VIEWS = {
     const W = window, n = new Date(), pm = new Date(n.getFullYear(), n.getMonth() - 1, 15);
     const last = [...db.services].sort((x, y) => (y.date || '').localeCompare(x.date || ''))[0] || {}; W.mmrMonth = W.mmrMonth || (last.date || n.toISOString()).slice(0, 7); W.mmrTruck = W.mmrTruck || last.vehicleId || (db.vehicles[0] || {}).id || '';
     const v = db.vehicles.find(x => x.id === W.mmrTruck) || {}; const ym = W.mmrMonth;
-    const rows = db.services.filter(s => s.vehicleId === v.id && (s.date || '').startsWith(ym)).sort((a, b) => a.date.localeCompare(b.date));
+    const rows = [...db.services, ...(db.parts || []).filter(p => !/^From service:/.test(p.notes || '')).map(p => ({ ...p, category: [p.type, p.position].filter(Boolean).join(' '), parts: p.brand || '' }))].filter(s => s.vehicleId === v.id && String(s.date || '').startsWith(ym)).sort((a, b) => String(a.date).localeCompare(String(b.date))); /*MMRPARTS tires & parts from merged Service Log*/
     const shops = [...new Set(rows.map(r => r.shop).filter(Boolean))].join(', ');
     const miles = Math.max(0, ...rows.map(r => Number(r.mileage) || 0)) || v.mileage || '';
     const mname = new Date(ym + '-15').toLocaleString('en-US', { month: 'long', year: 'numeric' });
