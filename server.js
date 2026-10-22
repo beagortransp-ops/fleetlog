@@ -29,7 +29,7 @@ const PLANS = [
   { id: 'basic', name: 'Basic', trucks: 5, desc: 'Up to 5 trucks', monthly: 15.99, yearly: 159 },
   { id: 'premium', name: 'Premium', trucks: 15, desc: 'Up to 15 trucks · batch printing · cost dashboard', monthly: 19.99, yearly: 199, popular: true },
   { id: 'pro', name: 'Pro', trucks: null, desc: 'Unlimited trucks · priority email support', monthly: 24.99, yearly: 249 }];
-const STRIPE_LINKS = { basic: { monthly: process.env.STRIPE_LINK_BASIC_MONTHLY || '', yearly: process.env.STRIPE_LINK_BASIC_YEARLY || '' }, premium: { monthly: process.env.STRIPE_LINK_PREMIUM_MONTHLY || '', yearly: process.env.STRIPE_LINK_PREMIUM_YEARLY || '' }, pro: { monthly: process.env.STRIPE_LINK_PRO_MONTHLY || 'https://buy.stripe.com/test_9B69AT2wg9PB5C8eQM5sA00', yearly: process.env.STRIPE_LINK_PRO_YEARLY || '' } };
+const STRIPE_LINKS = { basic: { monthly: process.env.STRIPE_LINK_BASIC_MONTHLY || '', yearly: process.env.STRIPE_LINK_BASIC_YEARLY || '' }, premium: { monthly: process.env.STRIPE_LINK_PREMIUM_MONTHLY || '', yearly: process.env.STRIPE_LINK_PREMIUM_YEARLY || '' }, pro: { monthly: process.env.STRIPE_LINK_PRO_MONTHLY || 'https://buy.stripe.com/test_9B69AT2wg9PB5C8eQM5sA00', yearly: process.env.STRIPE_LINK_PRO_YEARLY || 'https://buy.stripe.com/test_dRmfZhc6Qf9V1lS4c85sA01' } };
 const ANY_LINK = Object.values(STRIPE_LINKS).some(o => o.monthly || o.yearly);
 const TEST_PAYMENTS = process.env.TEST_PAYMENTS ? /^(1|true|yes)$/i.test(process.env.TEST_PAYMENTS) : true;
 function linkFor(plan, period, user) { const l = (STRIPE_LINKS[plan] || {})[period]; return l ? l + (l.includes('?') ? '&' : '?') + 'client_reference_id=' + encodeURIComponent(user || 'owner') : ''; }
