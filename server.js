@@ -122,6 +122,18 @@ function example(db) {
   const Q = (v, job, shop, price, chosen) => ({ id: id(), vehicleId: v.id, job, shop, price, date: d(3), notes: '', chosen, ...ex });
   db.quotes.push(Q(v1, 'Rear brakes', 'Valley Ford', 720, false), Q(v1, 'Rear brakes', 'Tracy Brake & Tire', 540, true), Q(v1, 'Rear brakes', 'Midas', 610, false));
 }
+/*DEMO1 read-only public demo store (in memory, never saved, never a real user's data)*/
+let DEMO = null;
+function demoDb() {
+  if (DEMO) return DEMO;
+  const d = { intervals: DEFAULT_INTERVALS.map(x => ({ ...x })), trialStart: new Date().toISOString() }; for (const c of COLS) d[c] = d[c] || [];
+  example(d); d.vehicles.forEach(v => v.truck = v.truck.replace('EX-', 'SAMPLE-'));
+  const v = d.vehicles[0], day = n => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
+  d.inspections.push({ id: crypto.randomUUID(), vehicleId: v.id, date: day(2), driver: 'Sample driver', mileage: v.mileage, type: 'Pre-trip', items: [{ item: 'Brakes', result: 'pass', note: '' }, { item: 'Tires', result: 'pass', note: '' }, { item: 'Lights', result: 'note', note: 'Sample: marker light dim' }], result: 'note', fixIds: [], example: true });
+  d.vir.push({ id: crypto.randomUUID(), vehicleId: v.id, inspDate: day(10), nextDate: day(-80), inspNo: 'SAMPLE-1', make: v.make, model: v.model, year: v.year, unit: v.truck, mileage: v.mileage, inspector: 'Sample inspector', carrier: 'Sample carrier', items: { 0: { m: 'X', c: '' }, 1: { m: 'A', c: 'Sample adjust' } }, example: true });
+  d.profile.push({ id: crypto.randomUUID(), hub: 'SAMPLE HUB', example: true });
+  d.demo = true; return (DEMO = d);
+}
 const send = (res, code, body, type = 'application/json') => { res.writeHead(code, { 'Content-Type': type }); res.end(type === 'application/json' ? JSON.stringify(body) : body); };
 const body = req => new Promise((ok, no) => { let s = ''; req.on('data', c => s += c); req.on('end', () => { try { ok(s ? JSON.parse(s) : {}); } catch (e) { no(e); } }); });
 const NUMS = ['mileage', 'cost', 'downtimeDays', 'price', 'year', 'miles', 'months'];
@@ -173,7 +185,17 @@ http.createServer(async (req, res) => {
     const [, a, b] = p, m = req.method;
     if (a === 'auth') return authRoute(req, res, b); /*ACCTS1*/
     const acct = sessUser(req); /*ACCTS1 user comes from the session cookie only; X-User is ignored*/
-    if (!acct) { if (a === 'billing' && m === 'GET' && !b) return send(res, 200, { ...billing({ vehicles: [], trialStart: new Date().toISOString() }, ''), ownerExempt: false, signedIn: false }); return send(res, 401, { error: 'auth' }); }
+    if (!acct) { /*DEMO1 logged out: GETs read the fixed demo store; every write needs an account*/
+      if (m !== 'GET' || a === 'export' || (a === 'kb' && p[2] === 'refresh')) return send(res, 401, { error: 'auth', demo: true });
+      if (a === 'billing' && !b) return send(res, 200, { ...billing({ vehicles: [], trialStart: new Date().toISOString() }, ''), ownerExempt: false, signedIn: false, demo: true });
+      const D = demoDb();
+      if (a === 'state') return send(res, 200, D);
+      if (a === 'dashboard') return send(res, 200, L.dashboard(D));
+      if (a === 'predictions') return send(res, 200, L.predictions(D));
+      if (a === 'quotes-summary') return send(res, 200, L.quoteGroups(D));
+      if (COLS.includes(a) && !b) return send(res, 200, D[a]);
+      if (a === 'kb') { const K = KB.load(), c = p[2], q = String(u.searchParams.get('q') || '').trim(); if (!c) return send(res, 200, KB.overview(D, K)); if (c === 'search') return send(res, 200, KB.search(D, K, q)); if (c === 'dtc') { const code = String(p[3] || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6); return send(res, 200, { code, info: K.dtc[code] || null, shop: [] }); } }
+      return send(res, 401, { error: 'auth', demo: true }); }
     const user = storeKey(acct), db = getDb(user);
     if (a === 'billing' && b === 'consent' && m === 'POST') { /*LEGAL1 auto-renewal consent record (kept; never deleted)*/
       const o = await body(req), plan = PLANS.find(x => x.id === String(o.plan || '').toLowerCase()), cycle = o.cycle === 'yearly' ? 'yearly' : 'monthly';

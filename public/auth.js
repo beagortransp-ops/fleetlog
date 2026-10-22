@@ -9,8 +9,8 @@ const AUTH = (() => {
     label: () => (user && user.email) || '',
     async current() { const r = await fetch('/api/auth/me', { credentials: 'same-origin', headers: { 'X-Pin': localStorage.getItem('fmPin') || '' } }); const j = await r.json().catch(() => ({}));
       if (r.status === 401 && j.error === 'pin') { pinScreen(); throw new Error('Sign-in code needed'); } user = r.ok ? j : null; return user; },
-    async login(email, password) { user = await post('login', { email, password }); return user; },
-    async signup(email, password) { user = await post('signup', { email, password }); return user; },
+    async login(email, password) { user = await post('login', { email, password }); window.DEMO = false; this.demo = false; return user; },
+    async signup(email, password) { user = await post('signup', { email, password }); window.DEMO = false; this.demo = false; return user; },
     async signOut() { try { await post('logout'); } catch (e) {} user = null; location.reload(); }
   };
 })();

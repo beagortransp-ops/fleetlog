@@ -18,6 +18,7 @@
       + '<label style="display:flex;flex-direction:row;gap:6px;align-items:flex-start;font-size:12.5px;color:#222;margin-top:6px;cursor:pointer"><input type="checkbox" class="ckPlan" id="' + id + '" onchange="if(this.checked)document.querySelectorAll(\'.ckPlan\').forEach(function(c){if(c!==this)c.checked=false},this)" style="width:auto;margin-top:2px"><span>I agree to the <a href="/terms" target="_blank" style="color:#4d148c">Terms</a> and the automatic renewal terms above</span></label>';
   };
   window.payGo = function (plan, per, link) {
+    if (window.DEMO) return window.demoLogin('signup', 'Create a free account first, then choose your plan.'); /*DEMO1*/
     var ck = document.getElementById('ck_' + plan + '_' + per);
     if (!ck || !ck.checked) { if (ck) { ck.parentNode.style.outline = '2px solid #c62828'; ck.focus(); } alert('Please check the box to agree to the Terms and automatic renewal terms first.'); return; }
     var p = planBy(plan);
