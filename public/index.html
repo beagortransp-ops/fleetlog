@@ -585,7 +585,7 @@ window.virSave = async () => { const f = document.getElementById('virF'), R = wi
   const pad = document.getElementById('virsig'); if (pad && pad.dataset.ink) o.sig = pad.toDataURL('image/png');
   if (!o.vehicleId) return alert('Pick a truck first.');
   try { const saved = o.id ? await API.update('vir', o.id, o) : await API.add('vir', o); window.VIRCUR = saved; await refresh(); alert('Inspection record saved.'); } catch (e) { alert(e.message); } };
-window.virPrint = () => { document.body.classList.add('virprint'); window.print(); setTimeout(() => document.body.classList.remove('virprint'), 500); };
+window.virPrint = () => { document.body.classList.add('virprint'); window.print(); /*VIRPRINTFIX: class removed by afterprint only; Safari/iOS print is async*/ };
 window.addEventListener('afterprint', () => document.body.classList.remove('virprint'));
 window.virDel = async id => { if (!confirm('Delete this inspection record?')) return; await API.remove('vir', id); if (window.VIRCUR && window.VIRCUR.id === id) window.VIRCUR = null; await refresh(); };
 window.virInitSig = () => { const c = document.getElementById('virsig'); if (!c || c.dataset.on) return; c.dataset.on = 1; const x = c.getContext('2d'); x.lineWidth = 2; x.lineCap = 'round'; let d = false;
