@@ -63,3 +63,12 @@ Render keeps daily disk snapshots on paid disks. Also keep a nightly copy: expor
 
 ## Local run
 `PIN_HASH=<hash> DATA_DIR=./data node server.js` → http://localhost:8790
+
+## Subscription compliance (California auto-renewal) – owner setup
+- Public pages: `/terms`, `/privacy`, `/refund` (static files in `public/`). Footer links on the app, sign-in and plan screens.
+- Every plan card shows the auto-renewal terms next to its buy button, and a required consent checkbox. Each consent is recorded via `POST /api/billing/consent` in `db.consents` (time, plan, cycle, price, text version, IP) – keep for at least 3 years.
+- Online cancel: "Manage or cancel subscription" (Settings and Plans & billing). Set env `STRIPE_PORTAL_URL` (or the `STRIPE_PORTAL_URL` constant in `public/legal.js`) to the Stripe Customer Portal login link. If empty, the button opens an in-app cancel form that emails fleetlog.support@gmail.com (subject "Cancel subscription") via Resend, or opens a mailto as fallback. You must then cancel it in Stripe yourself and reply.
+- After payment (`?paid=`) the app shows an on-screen confirmation with plan, price, renewal terms and how to cancel.
+- Confirmation/reminder emails are sent by Stripe. In the Stripe Dashboard turn on:
+  - Settings > Customer emails: **Successful payments** (receipts), **Upcoming renewals** (reminders, needed for yearly plans), **Trial ending reminders** (Pro yearly 10-day trial).
+  - Settings > Billing > **Customer portal**: activate, allow **cancel subscriptions**, copy the portal login link into `STRIPE_PORTAL_URL` on Render.

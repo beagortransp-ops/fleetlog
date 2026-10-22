@@ -32,6 +32,7 @@ const PLANS = [
 const STRIPE_LINKS = { basic: { monthly: process.env.STRIPE_LINK_BASIC_MONTHLY || 'https://buy.stripe.com/4gMaEX4KVdgl54agam4F206', yearly: process.env.STRIPE_LINK_BASIC_YEARLY || 'https://buy.stripe.com/4gMaEX5OZ2BHgMSbU64F205' }, premium: { monthly: process.env.STRIPE_LINK_PREMIUM_MONTHLY || 'https://buy.stripe.com/4gMeVdfpz0tz68e7DQ4F207', yearly: process.env.STRIPE_LINK_PREMIUM_YEARLY || 'https://buy.stripe.com/6oU00ja5f1xD54a5vI4F208' }, pro: { monthly: process.env.STRIPE_LINK_PRO_MONTHLY || 'https://buy.stripe.com/7sY9AT0uF905dAG5vI4F209', yearly: process.env.STRIPE_LINK_PRO_YEARLY || 'https://buy.stripe.com/28E14nfpzgsx4061fs4F204' } };
 const ANY_LINK = Object.values(STRIPE_LINKS).some(o => o.monthly || o.yearly);
 const TEST_PAYMENTS = process.env.TEST_PAYMENTS ? /^(1|true|yes)$/i.test(process.env.TEST_PAYMENTS) : false;
+const STRIPE_PORTAL_URL = process.env.STRIPE_PORTAL_URL || ''; /*LEGAL1 Stripe Customer Portal login link (Settings > Billing > Customer portal). Empty = in-app cancel request form.*/
 function linkFor(plan, period, user) { const l = (STRIPE_LINKS[plan] || {})[period]; return l ? l + (l.includes('?') ? '&' : '?') + 'client_reference_id=' + encodeURIComponent(user || 'owner') : ''; }
 /*PLANLIMIT plan + truck limit. Trial (no plan) = no limit. Paid without a plan id (legacy/owner) = unlimited.*/
 function planOf(db, user) {
@@ -44,7 +45,7 @@ function billing(db, user) {
   const paid = (db.billing && db.billing.status === 'paid') || (OWNER_PAID && !user);
   const start = Date.parse(db.trialStart) || Date.now(), end = start + TRIAL_DAYS * 864e5, now = Date.now();
   const plans = PLANS.map(p => ({ ...p, links: { monthly: linkFor(p.id, 'monthly', user), yearly: linkFor(p.id, 'yearly', user) } }));
-  return { paid: !!paid, trialStart: db.trialStart, trialEnds: new Date(end).toISOString(), daysLeft: paid ? null : Math.max(0, Math.ceil((end - now) / 864e5)), active: !!paid || now < end, paymentUrl: PAYMENT_URL, email: HELP_EMAIL, plans, testPayments: TEST_PAYMENTS, subscription: db.billing || null, ownerExempt: !!(OWNER_PAID && !user), ...(pl => ({ plan: pl ? pl.id : null, planName: pl ? pl.name : null, cycle: (db.billing && (db.billing.cycle || db.billing.period)) || null, truckLimit: pl ? pl.trucks : null, trucks: truckCount(db) }))(planOf(db, user)) };
+  return { paid: !!paid, trialStart: db.trialStart, trialEnds: new Date(end).toISOString(), daysLeft: paid ? null : Math.max(0, Math.ceil((end - now) / 864e5)), active: !!paid || now < end, paymentUrl: PAYMENT_URL, portalUrl: STRIPE_PORTAL_URL, email: HELP_EMAIL, plans, testPayments: TEST_PAYMENTS, subscription: db.billing || null, ownerExempt: !!(OWNER_PAID && !user), ...(pl => ({ plan: pl ? pl.id : null, planName: pl ? pl.name : null, cycle: (db.billing && (db.billing.cycle || db.billing.period)) || null, truckLimit: pl ? pl.trucks : null, trucks: truckCount(db) }))(planOf(db, user)) };
 }
 function getDb(user) {
   const f = fileFor(user);
@@ -100,7 +101,7 @@ async function contact(req, res) {
   try {
     const r = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: 'Bearer ' + process.env.RESEND_API_KEY, 'Content-Type': 'application/json' },
       body: JSON.stringify({ from: process.env.CONTACT_FROM || 'FleetLog <onboarding@resend.dev>', to: process.env.CONTACT_TO || 'fleetlog.support@gmail.com', reply_to: email,
-        subject: 'FleetLog support: ' + name.replace(/[\r\n]/g, ' '), text: msg + '\n\n---\nFrom: ' + name + ' <' + email + '>' }) });
+        subject: (d.subject === 'Cancel subscription' ? 'Cancel subscription' : 'FleetLog support') + ': ' + name.replace(/[\r\n]/g, ' '), text: msg + '\n\n---\nFrom: ' + name + ' <' + email + '>' }) });
     if (!r.ok) { console.error('contact: resend', r.status, (await r.text()).slice(0, 300)); return send(res, 502, { error: 'Could not send the message. Please email fleetlog.support@gmail.com.' }); }
     return send(res, 200, { ok: true });
   } catch (e) { console.error('contact:', e.message); return send(res, 502, { error: 'Could not send the message. Please email fleetlog.support@gmail.com.' }); }
@@ -110,7 +111,7 @@ http.createServer(async (req, res) => {
   try {
     if (u.pathname === '/healthz') return send(res, 200, { ok: true });
     if (p[0] !== 'api') {
-      const f = path.join(PUB, u.pathname === '/' ? 'index.html' : path.normalize(u.pathname).replace(/^\/+/, ''));
+      const f = path.join(PUB, u.pathname === '/' ? 'index.html' : ({ '/terms': 'terms.html', '/privacy': 'privacy.html', '/refund': 'refund.html', '/refunds': 'refund.html' })[u.pathname.replace(/\/+$/, '')] /*LEGAL1 public legal pages*/ || path.normalize(u.pathname).replace(/^\/+/, ''));
       if (!f.startsWith(PUB) || !fs.existsSync(f)) return send(res, 404, 'Not found', 'text/plain');
       if (/\.(html|js)$/.test(f)) res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate'); /*TAX875 no stale page*/
       return send(res, 200, fs.readFileSync(f), { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' }[path.extname(f)] || 'application/octet-stream');
@@ -126,6 +127,13 @@ http.createServer(async (req, res) => {
     const [, a, b] = p, m = req.method;
     const user = String(req.headers['x-user'] || u.searchParams.get('u') || '').trim().toLowerCase().slice(0, 200);
     const db = getDb(user);
+    if (a === 'billing' && b === 'consent' && m === 'POST') { /*LEGAL1 auto-renewal consent record (kept; never deleted)*/
+      const o = await body(req), plan = PLANS.find(x => x.id === String(o.plan || '').toLowerCase()), cycle = o.cycle === 'yearly' ? 'yearly' : 'monthly';
+      if (!plan) return send(res, 400, { error: 'plan must be basic|premium|pro' });
+      db.consents = Array.isArray(db.consents) ? db.consents : [];
+      db.consents.push({ at: new Date().toISOString(), plan: plan.id, cycle, price: plan[cycle], version: String(o.version || '').slice(0, 40), text: String(o.text || '').slice(0, 600), ip: ipOf(req), user: user || null });
+      save(db); return send(res, 201, { ok: true });
+    }
     if (a === 'billing' && b === 'test' && m === 'POST') { /*PLANS1 test checkout – before the 402 check, after the PIN check*/
       if (!TEST_PAYMENTS) return send(res, 403, { error: 'test payments disabled' });
       const o = await body(req), plan = PLANS.find(x => x.id === o.plan), period = (o.period || o.cycle) === 'yearly' ? 'yearly' : (o.period || o.cycle || 'monthly') === 'monthly' ? 'monthly' : '';
