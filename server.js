@@ -185,9 +185,12 @@ http.createServer(async (req, res) => {
     const [, a, b] = p, m = req.method;
     if (a === 'auth') return authRoute(req, res, b); /*ACCTS1*/
     const acct = sessUser(req); /*ACCTS1 user comes from the session cookie only; X-User is ignored*/
-    if (!acct) { /*DEMO1 logged out: GETs read the fixed demo store; every write needs an account*/
+    const demoReq = req.headers['x-demo'] === '1' || u.searchParams.get('demo') === '1'; /*DEMO2 explicit demo read for anyone; never touches user data*/
+    if (demoReq && acct && m !== 'GET') return send(res, 403, { error: 'demo_readonly', demo: true });
+    if (!acct || demoReq) { /*DEMO1 logged out (or DEMO2 flag): GETs read the fixed demo store; every write needs an account*/
       if (m !== 'GET' || a === 'export' || (a === 'kb' && p[2] === 'refresh')) return send(res, 401, { error: 'auth', demo: true });
-      if (a === 'billing' && !b) return send(res, 200, { ...billing({ vehicles: [], trialStart: new Date().toISOString() }, ''), ownerExempt: false, signedIn: false, demo: true });
+      if (a === 'billing' && !b && !acct) return send(res, 200, { ...billing({ vehicles: [], trialStart: new Date().toISOString() }, ''), ownerExempt: false, signedIn: false, demo: true });
+      if (a === 'billing' && !b) { const rb = billing(getDb(storeKey(acct)), storeKey(acct)); return send(res, 200, rb); }
       const D = demoDb();
       if (a === 'state') return send(res, 200, D);
       if (a === 'dashboard') return send(res, 200, L.dashboard(D));
