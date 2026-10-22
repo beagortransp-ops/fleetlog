@@ -83,6 +83,28 @@ function bumpMileage(db, rec) {
   const v = db.vehicles.find(v => v.id === rec.vehicleId);
   if (v && rec.mileage > (v.mileage || 0)) v.mileage = rec.mileage;
 }
+/*CONTACT1 "Need help?" form -> Resend. Env: RESEND_API_KEY, CONTACT_FROM, CONTACT_TO. No key = 503 {fallback:true}.*/
+const CRATE = new Map(), CMAX = 5, CWIN = 60 * 60 * 1000;
+async function contact(req, res) {
+  if (req.method !== 'POST') return send(res, 405, { error: 'POST only' });
+  let raw = ''; for await (const c of req) { raw += c; if (raw.length > 20000) return send(res, 413, { error: 'Message too long.' }); }
+  let d; try { d = JSON.parse(raw || '{}'); } catch { return send(res, 400, { error: 'Bad request.' }); }
+  if (d.website) return send(res, 200, { ok: true }); // honeypot: pretend success
+  const name = String(d.name || '').trim().slice(0, 100), email = String(d.email || '').trim().slice(0, 200), msg = String(d.message || '').trim();
+  if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !msg) return send(res, 400, { error: 'Please fill in name, a valid email and a message.' });
+  if (msg.length > 5000) return send(res, 400, { error: 'Message too long (max 5000 characters).' });
+  if (!process.env.RESEND_API_KEY) return send(res, 503, { fallback: true, error: 'Email sending not set up.' });
+  const ip = ipOf(req), now = Date.now(), h = (CRATE.get(ip) || []).filter(t => now - t < CWIN);
+  if (h.length >= CMAX) return send(res, 429, { error: 'Too many messages. Please try again later.' });
+  h.push(now); CRATE.set(ip, h);
+  try {
+    const r = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: 'Bearer ' + process.env.RESEND_API_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: process.env.CONTACT_FROM || 'FleetLog <onboarding@resend.dev>', to: process.env.CONTACT_TO || 'fleetlog.support@gmail.com', reply_to: email,
+        subject: 'FleetLog support: ' + name.replace(/[\r\n]/g, ' '), text: msg + '\n\n---\nFrom: ' + name + ' <' + email + '>' }) });
+    if (!r.ok) { console.error('contact: resend', r.status, (await r.text()).slice(0, 300)); return send(res, 502, { error: 'Could not send the message. Please email fleetlog.support@gmail.com.' }); }
+    return send(res, 200, { ok: true });
+  } catch (e) { console.error('contact:', e.message); return send(res, 502, { error: 'Could not send the message. Please email fleetlog.support@gmail.com.' }); }
+}
 http.createServer(async (req, res) => {
   const u = new URL(req.url, 'http://x'), p = u.pathname.split('/').filter(Boolean);
   try {
@@ -93,6 +115,7 @@ http.createServer(async (req, res) => {
       if (/\.(html|js)$/.test(f)) res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate'); /*TAX875 no stale page*/
       return send(res, 200, fs.readFileSync(f), { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' }[path.extname(f)] || 'application/octet-stream');
     }
+    if (u.pathname === '/api/contact') return contact(req, res); /*CONTACT1 public: before PIN/paywall*/
     if (PIN_HASH) {
       const ip = ipOf(req), now = Date.now(), f = (FAILS.get(ip) || []).filter(t => now - t < WIN);
       if (f.length >= MAXF) { FAILS.set(ip, f); res.setHeader('Retry-After', Math.ceil((WIN - (now - f[0])) / 1000)); return send(res, 429, { error: 'Too many wrong codes. Try again in 15 minutes.' }); }
