@@ -358,7 +358,7 @@ const VIEWS = {
     <div style="text-align:right;font-weight:bold;font-size:9px;margin:3px 0">14 May 2025</div><!--MMRMATCH form revision date-->
     <p style="margin:0 0 8px">To comply with U.S. Federal regulations, this form must be completed, signed, and submitted to FedEx by the 20th of the month following the month for which repairs, or maintenance were performed on any service provider-owned or leased equipment. Submit one record for each piece of equipment, even if not regularly providing services.</p>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 40px">
-    ${f('Maintenance Record for the Month and Year of:', '', true) /*MMRCLEAN*/}${f('Domicile Station/Hub:', esc(((db.profile || [])[0] || {}).hub || '0952'), 'hub')}
+    ${f('Maintenance Record for the Month and Year of:', '', true) /*MMRCLEAN*/}${f('Domicile Station/Hub:', esc(((db.profile || [])[0] || {}).hub || ''), 'hub')}
     ${f('Service Provider Company Name:', esc(((db.profile || [])[0] || {}).company || ''), 'company')}${f('Current Mileage* (Odometer Reading):', miles ? String(Number(miles)) : '')}
     ${f('Vehicle Unit #:', esc(v.truck || ''))}<div style="font-size:8px;padding-top:2px">*If reading has decreased due to odometer repair/replacement, proof should also be provided. If unit is undergoing repair and unavailable, "N/A" may be utilized for current mileage.</div></div>
     ${yn('Were any repairs, or preventative maintenance performed on this unit?', rows.length > 0, 'rep')}
