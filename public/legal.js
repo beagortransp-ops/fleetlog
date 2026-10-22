@@ -2,7 +2,7 @@
 (function () {
   var TO = 'fleetlog.support@gmail.com', CONSENT_VER = 'v1-2026-10-22';
   var CONSENT_TXT = 'I agree to the Terms and the automatic renewal terms above';
-  var STRIPE_PORTAL_URL = ''; // optional hardcoded Stripe Customer Portal login link; server env STRIPE_PORTAL_URL wins
+  var STRIPE_PORTAL_URL = 'https://billing.stripe.com/p/login/aFabJ15OZekpdAG7DQ4F200'; // optional hardcoded Stripe Customer Portal login link; server env STRIPE_PORTAL_URL wins
   function money(n) { n = Number(n); return '$' + (n % 1 ? n.toFixed(2) : n); }
   function e(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function plans() { return ((window.FL_BILL && window.FL_BILL.plans) || window.FL_PLANS || []); }
