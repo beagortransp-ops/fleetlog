@@ -185,7 +185,7 @@ function render() {
   const a = $('#amt'); if (a) a.focus();
 }
 /*TRIAL3*/ function payScreen(b) {
-  if (document.getElementById('payBox')) return; const em = (b && b.email) || 'fleetlogsupport1@gmail.com', url = (b && b.paymentUrl) || '';
+  if (document.getElementById('payBox')) return; const em = (b && b.email) || 'fleetlog.support@gmail.com', url = (b && b.paymentUrl) || '';
   document.body.insertAdjacentHTML('beforeend', `<div id="payBox" style="position:fixed;inset:0;background:#f4f5fb;z-index:98;display:flex;align-items:center;justify-content:center;padding:20px;font-family:system-ui,sans-serif"><div style="background:#fff;border-radius:16px;box-shadow:0 6px 30px #1a237e22;padding:28px 24px;max-width:420px;text-align:center"><div style="font-size:40px">🚚</div><h2 style="color:#141b6b;margin:8px 0">Your free trial has ended</h2><p style="color:#445;font-size:15px">Your 3-day FleetLog trial is over. Please pay to keep using FleetLog. Your data is saved and will be there when you continue.</p><button class="b" style="font-size:17px;padding:12px 26px;margin:10px 0" onclick="${url ? `location.href='${url.replace(/'/g, '%27')}'` : `alert('Online payment is coming soon. Email ${em} to continue.')`}">Pay now</button><p style="font-size:13px;color:#667">Need help? <a href="mailto:${em}?subject=FleetLog%20subscription" style="color:#4d148c;font-weight:600">${em}</a></p></div></div>`);
 }
 async function trialBanner() { try { const b = await API.req('GET', 'billing'); const old = document.getElementById('trialBar'); if (old) old.remove(); if (b.paid || !b.active) return; document.body.insertAdjacentHTML('afterbegin', `<div id="trialBar" style="background:#fff4dc;color:#7a5200;text-align:center;font:600 13px system-ui;padding:5px">Trial: ${b.daysLeft} day${b.daysLeft === 1 ? '' : 's'} left</div>`); } catch (e) {} }
@@ -593,5 +593,5 @@ async function start() { await refresh(); const h = new URLSearchParams(location
   /*NOKBQ: kb route hidden*/
   else if (h.has('vir')) { mode = 'desk'; tab = 'vir'; render(); if (h.has('new')) virNew(db.vehicles[0].id); }
   else { mode = 'desk'; tab = 'home'; render(); } }
-</script><!--SUPPORTMAIL--><div style="text-align:center;padding:18px 12px 28px;font:13px system-ui;color:#6b6f8a">Need help? <a href="mailto:fleetlogsupport1@gmail.com?subject=FleetLog%20support" style="color:#4d148c;font-weight:600;text-decoration:none">fleetlogsupport1@gmail.com</a></div>
+</script><!--SUPPORTMAIL--><div style="text-align:center;padding:18px 12px 28px;font:13px system-ui;color:#6b6f8a">Need help? <a href="mailto:fleetlog.support@gmail.com?subject=FleetLog%20support" style="color:#4d148c;font-weight:600;text-decoration:none">fleetlog.support@gmail.com</a></div>
 </body></html>
