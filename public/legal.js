@@ -15,7 +15,7 @@
   window.renewNote = function (p, per) {
     var id = 'ck_' + p.id + '_' + per;
     return '<div style="font-size:12.5px;color:#222;background:#f3effa;border:1px solid #d9cdee;border-radius:8px;padding:7px;margin-top:8px;line-height:1.4"><b>' + e(renewText(p, per)) + '</b></div>'
-      + '<label style="display:flex;flex-direction:row;gap:6px;align-items:flex-start;font-size:12.5px;color:#222;margin-top:6px;cursor:pointer"><input type="checkbox" id="' + id + '" style="width:auto;margin-top:2px"><span>I agree to the <a href="/terms" target="_blank" style="color:#4d148c">Terms</a> and the automatic renewal terms above</span></label>';
+      + '<label style="display:flex;flex-direction:row;gap:6px;align-items:flex-start;font-size:12.5px;color:#222;margin-top:6px;cursor:pointer"><input type="checkbox" class="ckPlan" id="' + id + '" onchange="if(this.checked)document.querySelectorAll(\'.ckPlan\').forEach(function(c){if(c!==this)c.checked=false},this)" style="width:auto;margin-top:2px"><span>I agree to the <a href="/terms" target="_blank" style="color:#4d148c">Terms</a> and the automatic renewal terms above</span></label>';
   };
   window.payGo = function (plan, per, link) {
     var ck = document.getElementById('ck_' + plan + '_' + per);
