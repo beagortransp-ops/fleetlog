@@ -10,7 +10,31 @@ Plain Node (>=18), no dependencies. Code only: no PIN, no data, no backups in th
 | `PIN_HASH` | SHA-256 hex of the PIN – same format as the old `pin.hash` file. Unset = no PIN (local testing only) |
 
 | `OWNER_PAID` | `true` = the owner/default account (no signed-in user) is never locked by the trial. Set on Sergio's own instance. |
-| `PAYMENT_URL` | link for the **Pay now** button on the trial-ended screen (optional; without it the button tells them to email support) |
+| `PAYMENT_URL` | legacy single pay link (kept for compatibility; plan links below are preferred) |
+| `STRIPE_LINK_BASIC_MONTHLY` / `STRIPE_LINK_BASIC_YEARLY` | Stripe Payment Link URLs for Basic |
+| `STRIPE_LINK_PREMIUM_MONTHLY` / `STRIPE_LINK_PREMIUM_YEARLY` | Stripe Payment Link URLs for Premium |
+| `STRIPE_LINK_PRO_MONTHLY` / `STRIPE_LINK_PRO_YEARLY` | Stripe Payment Link URLs for Pro |
+| `TEST_PAYMENTS` | `true` shows "Test payment (no charge)" buttons and enables `?testTrialEnd=1`. Default: ON when no Stripe links are set, OFF otherwise. Set `false` once real payments go live. |
+
+## Plans (defined once in `server.js` → `PLANS`, exposed by `/api/billing` as `plans`)
+| Plan | Monthly | Yearly | Trucks | Adds |
+|---|---|---|---|---|
+| Basic | $15.99 | $159 | up to 5 | core: service log, tires & parts, inspections, FedEx Monthly Record & VIR printing, reminders, phone access |
+| Premium (most popular) | $19.99 | $199 | up to 15 | + all-trucks batch printing, cost dashboard by truck |
+| Pro | $24.99 | $249 | unlimited | + unlimited trucks, priority email support |
+
+The **Plans & billing** screen opens when the trial ends, from the trial bar link, and from Settings. Each plan button opens its Stripe Payment Link with `?client_reference_id=<user>`; with no link set it says "Online payment coming soon – contact fleetlog.support@gmail.com".
+
+### Test mode
+- `POST /api/billing/test {"plan":"basic|premium|pro","period":"monthly|yearly"}` marks the account paid (`billing.test=true`, renews +1 mo/+1 yr). `DELETE /api/billing/test` cancels it (trial-ended screen returns). Both need the PIN when `PIN_HASH` is set, and work after the trial ends.
+- Add `?testTrialEnd=1` to the page URL (or any API call) to set the trial start to 4 days ago.
+
+### Stripe Payment Links (test mode, no real money)
+1. dashboard.stripe.com → toggle **Test mode** on.
+2. Product catalog → add products Basic / Premium / Pro, each with a recurring monthly and yearly price.
+3. Payment Links → create one link per price (6 total). Under After payment you can redirect to `https://fleetlog-o5z2.onrender.com`.
+4. Paste each link URL into the matching `STRIPE_LINK_*` env var on Render. Pay with test card `4242 4242 4242 4242`, any future date, any CVC.
+5. Note: a Payment Link payment does not yet mark the account paid automatically (needs a Stripe webhook – not built). Until then mark paid by hand (below) or use test payments.
 
 ## Free trial
 Each new account gets a 3-day trial (`trialStart` saved on first use; older accounts get it the first time they're seen). A small "Trial: X days left" bar shows during the trial. After 3 days, unless the account has `billing: {"status":"paid"}` in its data file (or is the owner with `OWNER_PAID=true`), data routes return **402** and the app shows a payment screen (help: fleetlog.support@gmail.com). The PIN screen, `/api/billing` and `/healthz` still work. Data is never deleted. To mark an account paid, add `"billing": {"status": "paid"}` to its data file and restart.

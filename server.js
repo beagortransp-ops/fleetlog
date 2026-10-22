@@ -24,10 +24,20 @@ function fileFor(user) { return user ? path.join(DATA_DIR, 'data-' + crypto.crea
 /*TRIAL3 3-day free trial. Data is never deleted; after the trial, data routes return 402 until paid.*/
 const TRIAL_DAYS = 3, PAYMENT_URL = process.env.PAYMENT_URL || '', HELP_EMAIL = 'fleetlog.support@gmail.com';
 const OWNER_PAID = /^(1|true|yes)$/i.test(process.env.OWNER_PAID || ''); // exempts the owner (no-user / default) account
+/*PLANS1 subscription plans – defined once, exposed via /api/billing as `plans`.*/
+const PLANS = [
+  { id: 'basic', name: 'Basic', trucks: 5, desc: 'Up to 5 trucks', monthly: 15.99, yearly: 159 },
+  { id: 'premium', name: 'Premium', trucks: 15, desc: 'Up to 15 trucks · batch printing · cost dashboard', monthly: 19.99, yearly: 199, popular: true },
+  { id: 'pro', name: 'Pro', trucks: null, desc: 'Unlimited trucks · priority email support', monthly: 24.99, yearly: 249 }];
+const STRIPE_LINKS = { basic: { monthly: process.env.STRIPE_LINK_BASIC_MONTHLY || '', yearly: process.env.STRIPE_LINK_BASIC_YEARLY || '' }, premium: { monthly: process.env.STRIPE_LINK_PREMIUM_MONTHLY || '', yearly: process.env.STRIPE_LINK_PREMIUM_YEARLY || '' }, pro: { monthly: process.env.STRIPE_LINK_PRO_MONTHLY || '', yearly: process.env.STRIPE_LINK_PRO_YEARLY || '' } };
+const ANY_LINK = Object.values(STRIPE_LINKS).some(o => o.monthly || o.yearly);
+const TEST_PAYMENTS = process.env.TEST_PAYMENTS ? /^(1|true|yes)$/i.test(process.env.TEST_PAYMENTS) : !ANY_LINK;
+function linkFor(plan, period, user) { const l = (STRIPE_LINKS[plan] || {})[period]; return l ? l + (l.includes('?') ? '&' : '?') + 'client_reference_id=' + encodeURIComponent(user || 'owner') : ''; }
 function billing(db, user) {
   const paid = (db.billing && db.billing.status === 'paid') || (OWNER_PAID && !user);
   const start = Date.parse(db.trialStart) || Date.now(), end = start + TRIAL_DAYS * 864e5, now = Date.now();
-  return { paid: !!paid, trialStart: db.trialStart, trialEnds: new Date(end).toISOString(), daysLeft: paid ? null : Math.max(0, Math.ceil((end - now) / 864e5)), active: !!paid || now < end, paymentUrl: PAYMENT_URL, email: HELP_EMAIL };
+  const plans = PLANS.map(p => ({ ...p, links: { monthly: linkFor(p.id, 'monthly', user), yearly: linkFor(p.id, 'yearly', user) } }));
+  return { paid: !!paid, trialStart: db.trialStart, trialEnds: new Date(end).toISOString(), daysLeft: paid ? null : Math.max(0, Math.ceil((end - now) / 864e5)), active: !!paid || now < end, paymentUrl: PAYMENT_URL, email: HELP_EMAIL, plans, testPayments: TEST_PAYMENTS, subscription: db.billing || null, ownerExempt: !!(OWNER_PAID && !user) };
 }
 function getDb(user) {
   const f = fileFor(user);
@@ -86,8 +96,21 @@ http.createServer(async (req, res) => {
     const [, a, b] = p, m = req.method;
     const user = String(req.headers['x-user'] || u.searchParams.get('u') || '').trim().toLowerCase().slice(0, 200);
     const db = getDb(user);
+    if (a === 'billing' && b === 'test' && m === 'POST') { /*PLANS1 test checkout – before the 402 check, after the PIN check*/
+      if (!TEST_PAYMENTS) return send(res, 403, { error: 'test payments disabled' });
+      const o = await body(req), plan = PLANS.find(x => x.id === o.plan), period = o.period === 'yearly' ? 'yearly' : o.period === 'monthly' ? 'monthly' : '';
+      if (!plan || !period) return send(res, 400, { error: 'plan must be basic|premium|pro, period monthly|yearly' });
+      const now = new Date(), r = new Date(now); if (period === 'yearly') r.setFullYear(r.getFullYear() + 1); else r.setMonth(r.getMonth() + 1);
+      db.billing = { status: 'paid', plan: plan.id, period, amount: plan[period], paidAt: now.toISOString(), test: true, renews: r.toISOString() }; save(db);
+      return send(res, 200, billing(db, user));
+    }
+    if (a === 'billing' && b === 'test' && m === 'DELETE') {
+      if (!TEST_PAYMENTS) return send(res, 403, { error: 'test payments disabled' });
+      delete db.billing; save(db); return send(res, 200, billing(db, user));
+    }
+    if (TEST_PAYMENTS && u.searchParams.get('testTrialEnd') === '1') { db.trialStart = new Date(Date.now() - 4 * 864e5).toISOString(); save(db); }
+    if (a === 'billing') return send(res, 200, billing(db, user));
     const bl = billing(db, user);
-    if (a === 'billing') return send(res, 200, bl);
     if (!bl.active) return send(res, 402, { error: 'trial_ended', ...bl });
     if (a === 'state' && m === 'GET') return send(res, 200, db);
     if (a === 'dashboard') return send(res, 200, L.dashboard(db));
