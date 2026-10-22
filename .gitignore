@@ -1,0 +1,12 @@
+data/
+*.json.tmp
+data*.json
+!package.json
+pin.hash
+*.bak*
+*.backup*
+shots/
+*.log
+node_modules/
+.env
+.DS_Store
