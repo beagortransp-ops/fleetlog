@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><head><meta name="fl-version" content="20261021e"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<!doctype html><html lang="en"><head><meta name="fl-version" content="20261021f"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>FleetLog</title>
 <style>
 :root{--p:#4d148c;--o:#ff6200;--bg:#f5f5f7;--c:#fff;--b:#ddd;--red:#c62828;--amb:#e09000;--grn:#2e7d32}
@@ -116,13 +116,13 @@ body.virprint .virT{height:100%!important;margin-top:4px!important}
 body.virprint .virT td:first-child{white-space:normal!important;font-size:8.5px!important;line-height:1.1!important}
 body.virprint .virT td{font-size:9px!important}body.virprint .virT td[colspan]{font-size:10px!important}
 body.virprint .virT td input{font-size:9px!important}body.virprint .virT tr>*:last-child:not([colspan]){width:0.95in!important}}
-.virCols{display:grid;grid-template-columns:1fr}@media print{/*SAFEPRINT*/html,body{height:auto!important;min-height:0!important;margin:0!important;padding:0!important;overflow:hidden!important}body>*:not(#app){display:none!important}#app>*:not(#mmrForm):not(#virForm){display:none!important}body:not(.virprint) #app>#virForm{display:none!important}body.virprint #app>#mmrForm{display:none!important}#app{min-height:0!important;height:auto!important}}</style></head><body>
+.virCols{display:grid;grid-template-columns:1fr}@media print{#trialBar,#payBox{display:none!important}}@media print{/*SAFEPRINT*/html,body{height:auto!important;min-height:0!important;margin:0!important;padding:0!important;overflow:hidden!important}body>*:not(#app){display:none!important}#app>*:not(#mmrForm):not(#virForm){display:none!important}body:not(.virprint) #app>#virForm{display:none!important}body.virprint #app>#mmrForm{display:none!important}#app{min-height:0!important;height:auto!important}}</style></head><body>
 <header><h1><svg class="logo" viewBox="0 0 40 40" width="34" height="34" aria-label="Fleet Log logo"><defs><linearGradient id="flg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#141b6b"/><stop offset="1" stop-color="#4d148c"/></linearGradient></defs><rect width="40" height="40" rx="10" fill="url(#flg)"/><path d="M9 27a11 11 0 0 1 22 0" fill="none" stroke="#ffffff33" stroke-width="3.2" stroke-linecap="round"/><path d="M9 27a11 11 0 0 1 17.8-8.6" fill="none" stroke="#ff6200" stroke-width="3.2" stroke-linecap="round"/><path d="M20 27l6-8" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><circle cx="20" cy="27" r="2.6" fill="#fff"/></svg><!--GAUGELOGO--><span style="color:#4d148c;font-size:17px;font-weight:800">FleetLog</span></h1><nav id="nav"></nav></header>
 <main id="app"></main><div id="toast"><span id="tmsg"></span><button id="undo">Undo</button></div>
-<script src="config.js?v=20261021e"></script>
+<script src="config.js?v=20261021f"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="auth.js?v=20261021e"></script>
-<script src="logic.js?v=20261021e"></script>
+<script src="auth.js?v=20261021f"></script>
+<script src="logic.js?v=20261021f"></script>
 <script>
 // ===== Single data-access layer. Swap this object for on-device storage (Phase 2). =====
 /* hosted build: #pin= link login removed – enter the code on the sign-in screen */
@@ -130,6 +130,7 @@ const API = {
   async req(method, url, data) {
     const r = await fetch('/api/' + url, { method, headers: { 'Content-Type': 'application/json', 'X-User': AUTH.id(), 'X-Pin': localStorage.getItem('fmPin') || '' }, body: data ? JSON.stringify(data) : undefined });
     if (r.status === 401) { pinScreen(); throw new Error('Sign-in code needed'); }
+    if (r.status === 402) { payScreen(await r.json().catch(() => ({}))); throw new Error('Trial ended'); }
     const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status); return j;
   },
   state: () => API.req('GET', 'state'),
@@ -153,7 +154,7 @@ const exTag = r => r.example ? '<span class="ex">example</span>' : '';
 const vOpts = () => db.vehicles.map(v => `<option value="${v.id}">${esc(v.truck)}</option>`).join('');
 const ICO = { home: '🚚', fix: '🛠️', dash: '📊', vehicles: '🚛', services: '🔧', parts: '🛞', due: '⏰', mmr: '📋', insp: '✅', vir: '🧾', kb: '📚', quotes: '💬', settings: '⚙️' };
 const TABS = { home: 'Trucks', dash: 'Dashboard', vehicles: 'Vehicles', services: 'Service log', parts: 'Tires & parts', due: 'Upcoming', fix: 'Fix later', insp: 'Inspections', mmr: 'Monthly record', vir: 'Vehicle Inspection Record', settings: 'Settings' };
-async function refresh() { db = await API.state(); render(); }
+async function refresh() { db = await API.state(); render(); trialBanner(); }
 function render() {
   document.body.classList.toggle('quick', mode === 'quick');
   const fixN = needFix().length;
@@ -183,6 +184,11 @@ function render() {
   });
   const a = $('#amt'); if (a) a.focus();
 }
+/*TRIAL3*/ function payScreen(b) {
+  if (document.getElementById('payBox')) return; const em = (b && b.email) || 'beagortransp@gmail.com', url = (b && b.paymentUrl) || '';
+  document.body.insertAdjacentHTML('beforeend', `<div id="payBox" style="position:fixed;inset:0;background:#f4f5fb;z-index:98;display:flex;align-items:center;justify-content:center;padding:20px;font-family:system-ui,sans-serif"><div style="background:#fff;border-radius:16px;box-shadow:0 6px 30px #1a237e22;padding:28px 24px;max-width:420px;text-align:center"><div style="font-size:40px">🚚</div><h2 style="color:#141b6b;margin:8px 0">Your free trial has ended</h2><p style="color:#445;font-size:15px">Your 3-day FleetLog trial is over. Please pay to keep using FleetLog. Your data is saved and will be there when you continue.</p><button class="b" style="font-size:17px;padding:12px 26px;margin:10px 0" onclick="${url ? `location.href='${url.replace(/'/g, '%27')}'` : `alert('Online payment is coming soon. Email ${em} to continue.')`}">Pay now</button><p style="font-size:13px;color:#667">Need help? <a href="mailto:${em}?subject=FleetLog%20subscription" style="color:#4d148c;font-weight:600">${em}</a></p></div></div>`);
+}
+async function trialBanner() { try { const b = await API.req('GET', 'billing'); const old = document.getElementById('trialBar'); if (old) old.remove(); if (b.paid || !b.active) return; document.body.insertAdjacentHTML('afterbegin', `<div id="trialBar" style="background:#fff4dc;color:#7a5200;text-align:center;font:600 13px system-ui;padding:5px">Trial: ${b.daysLeft} day${b.daysLeft === 1 ? '' : 's'} left</div>`); } catch (e) {} }
 function pinScreen() {
   if (document.getElementById('pinBox')) return;
   document.body.insertAdjacentHTML('beforeend', `<div id="pinBox" style="position:fixed;inset:0;background:#fff;z-index:99;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;font-family:sans-serif"><h2>FleetLog sign-in</h2><input id="pinIn" type="password" inputmode="numeric" autocomplete="off" placeholder="Sign-in code" style="font-size:24px;padding:10px;width:220px;text-align:center"><button class="b" onclick="localStorage.setItem('fmPin', document.getElementById('pinIn').value.trim()); location.reload()">Sign in</button><div id="pinErr" style="color:#b00">${localStorage.getItem('fmPin') ? 'That code did not work.' : ''}</div></div>`);

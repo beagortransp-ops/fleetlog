@@ -18,3 +18,7 @@ services:
         value: "22"
       - key: PIN_HASH
         sync: false
+      - key: OWNER_PAID
+        value: "true"
+      - key: PAYMENT_URL
+        sync: false

@@ -21,6 +21,14 @@ const DEFAULT_INTERVALS = [
 // Real protection for shared cloud data = Supabase table with row-level security (see SETUP-SIGNIN.md).
 const DBS = new Map();
 function fileFor(user) { return user ? path.join(DATA_DIR, 'data-' + crypto.createHash('sha256').update(user).digest('hex').slice(0, 24) + '.json') : DATA; }
+/*TRIAL3 3-day free trial. Data is never deleted; after the trial, data routes return 402 until paid.*/
+const TRIAL_DAYS = 3, PAYMENT_URL = process.env.PAYMENT_URL || '', HELP_EMAIL = 'beagortransp@gmail.com';
+const OWNER_PAID = /^(1|true|yes)$/i.test(process.env.OWNER_PAID || ''); // exempts the owner (no-user / default) account
+function billing(db, user) {
+  const paid = (db.billing && db.billing.status === 'paid') || (OWNER_PAID && !user);
+  const start = Date.parse(db.trialStart) || Date.now(), end = start + TRIAL_DAYS * 864e5, now = Date.now();
+  return { paid: !!paid, trialStart: db.trialStart, trialEnds: new Date(end).toISOString(), daysLeft: paid ? null : Math.max(0, Math.ceil((end - now) / 864e5)), active: !!paid || now < end, paymentUrl: PAYMENT_URL, email: HELP_EMAIL };
+}
 function getDb(user) {
   const f = fileFor(user);
   if (DBS.has(f)) return DBS.get(f);
@@ -28,7 +36,7 @@ function getDb(user) {
   if (!d) d = { intervals: DEFAULT_INTERVALS.map(x => ({ ...x, id: crypto.randomUUID() })) };
   for (const c of COLS) d[c] = d[c] || [];
   Object.defineProperty(d, '_file', { value: f, enumerable: false });
-  DBS.set(f, d); return d;
+  DBS.set(f, d); if (!d.trialStart) { d.trialStart = new Date().toISOString(); fs.writeFileSync(f + '.tmp', JSON.stringify(d, null, 2)); fs.renameSync(f + '.tmp', f); } return d;
 }
 const save = db => { fs.writeFileSync(db._file + '.tmp', JSON.stringify(db, null, 2)); fs.renameSync(db._file + '.tmp', db._file); };
 save(getDb(''));
@@ -78,6 +86,9 @@ http.createServer(async (req, res) => {
     const [, a, b] = p, m = req.method;
     const user = String(req.headers['x-user'] || u.searchParams.get('u') || '').trim().toLowerCase().slice(0, 200);
     const db = getDb(user);
+    const bl = billing(db, user);
+    if (a === 'billing') return send(res, 200, bl);
+    if (!bl.active) return send(res, 402, { error: 'trial_ended', ...bl });
     if (a === 'state' && m === 'GET') return send(res, 200, db);
     if (a === 'dashboard') return send(res, 200, L.dashboard(db));
     if (a === 'predictions') return send(res, 200, L.predictions(db));
