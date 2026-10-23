@@ -10,7 +10,7 @@ const PIN_HASH = String(process.env.PIN_HASH || (f => { try { return fs.readFile
 /*ACCTS1 customer accounts: users.json in DATA_DIR. Password = scrypt(salt). Session = random token in an httpOnly cookie; only its sha256 is stored.
   Each account has its own store (data-<hash>.json). The legacy/default store (data.json) is adopted once by OWNER_EMAIL, or, when OWNER_EMAIL is unset,
   by the first account created while data.json already has real (non-example) data. See ACCOUNTS.md.*/
-const OWNER_EMAIL = String(process.env.OWNER_EMAIL || '').trim().toLowerCase();
+const OWNER_EMAIL = String(process.env.OWNER_EMAIL || '').trim().replace(/^["']|["']$/g, '').trim().toLowerCase();
 const UFILE = path.join(DATA_DIR, 'users.json');
 const UDB = (() => { try { const d = JSON.parse(fs.readFileSync(UFILE, 'utf8')); d.users = d.users || []; d.sessions = d.sessions || {}; return d; } catch { return { users: [], sessions: {} }; } })();
 const usave = () => { fs.writeFileSync(UFILE + '.tmp', JSON.stringify(UDB, null, 2)); fs.renameSync(UFILE + '.tmp', UFILE); };
@@ -69,7 +69,7 @@ const DBS = new Map();
 function fileFor(user) { return user ? path.join(DATA_DIR, 'data-' + crypto.createHash('sha256').update(user).digest('hex').slice(0, 24) + '.json') : DATA; }
 /*TRIAL3 3-day free trial. Data is never deleted; after the trial, data routes return 402 until paid.*/
 const TRIAL_DAYS = Number(process.env.TRIAL_DAYS || 0), /*NOTRIAL pay before use*/ PAYMENT_URL = process.env.PAYMENT_URL || '', HELP_EMAIL = 'fleetlog.support@gmail.com';
-const OWNER_PAID = /^(1|true|yes)$/i.test(process.env.OWNER_PAID || ''); // exempts the owner (no-user / default) account
+const OWNER_PAID = /^(1|true|yes|on)$/i.test(String(process.env.OWNER_PAID || '').trim().replace(/^["']|["']$/g, '').trim()); // exempts the owner (no-user / default) account
 /*PLANS1 subscription plans – defined once, exposed via /api/billing as `plans`.*/
 const PLANS = [
   { id: 'basic', name: 'Basic', trucks: 5, desc: 'Up to 5 trucks', monthly: 15.99, yearly: 159 },
@@ -87,7 +87,7 @@ function planOf(db, user) {
   return PLANS.find(x => x.id === (b && b.plan)) || PLANS.find(x => x.id === 'pro');
 }
 const OWNER_KEYS = new Set(); /*OWNERPAID2 signed-in OWNER_EMAIL account counts as owner*/
-const ownerPaid = user => OWNER_PAID && (!user || OWNER_KEYS.has(user));
+const ownerPaid = user => (OWNER_PAID && !user) || OWNER_KEYS.has(user); /*OWNERPAID4 OWNER_EMAIL match alone is enough*/
 const truckCount = db => db.vehicles.filter(v => !v.example).length;
 function billing(db, user) {
   const paid = (db.billing && db.billing.status === 'paid') || ownerPaid(user);
@@ -169,7 +169,7 @@ async function contact(req, res) {
 http.createServer(async (req, res) => {
   const u = new URL(req.url, 'http://x'), p = u.pathname.split('/').filter(Boolean);
   try {
-    if (u.pathname === '/healthz') return send(res, 200, { ok: true });
+    if (u.pathname === '/healthz') return send(res, 200, { ok: true, v: 'owner4', ownerEmailSet: !!OWNER_EMAIL, ownerPaidSet: OWNER_PAID });
     if (p[0] !== 'api') {
       const f = path.join(PUB, u.pathname === '/' ? 'index.html' : ({ '/terms': 'terms.html', '/privacy': 'privacy.html', '/refund': 'refund.html', '/refunds': 'refund.html' })[u.pathname.replace(/\/+$/, '')] /*LEGAL1 public legal pages*/ || path.normalize(u.pathname).replace(/^\/+/, ''));
       if (!f.startsWith(PUB) || !fs.existsSync(f)) return send(res, 404, 'Not found', 'text/plain');
