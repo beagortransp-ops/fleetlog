@@ -82,16 +82,18 @@ const STRIPE_PORTAL_URL = process.env.STRIPE_PORTAL_URL || 'https://billing.stri
 function linkFor(plan, period, user) { const l = (STRIPE_LINKS[plan] || {})[period]; return l ? l + (l.includes('?') ? '&' : '?') + 'client_reference_id=' + encodeURIComponent(user || 'owner') /*ACCTS1 user = account id*/ : ''; }
 /*PLANLIMIT plan + truck limit. Trial (no plan) = no limit. Paid without a plan id (legacy/owner) = unlimited.*/
 function planOf(db, user) {
-  const b = db.billing, paid = (b && b.status === 'paid') || (OWNER_PAID && !user);
+  const b = db.billing, paid = (b && b.status === 'paid') || ownerPaid(user);
   if (!paid) return null;
   return PLANS.find(x => x.id === (b && b.plan)) || PLANS.find(x => x.id === 'pro');
 }
+const OWNER_KEYS = new Set(); /*OWNERPAID2 signed-in OWNER_EMAIL account counts as owner*/
+const ownerPaid = user => OWNER_PAID && (!user || OWNER_KEYS.has(user));
 const truckCount = db => db.vehicles.filter(v => !v.example).length;
 function billing(db, user) {
-  const paid = (db.billing && db.billing.status === 'paid') || (OWNER_PAID && !user);
+  const paid = (db.billing && db.billing.status === 'paid') || ownerPaid(user);
   const start = Date.parse(db.trialStart) || Date.now(), end = start + TRIAL_DAYS * 864e5, now = Date.now();
   const plans = PLANS.map(p => ({ ...p, links: { monthly: linkFor(p.id, 'monthly', user), yearly: linkFor(p.id, 'yearly', user) } }));
-  return { paid: !!paid, trialStart: db.trialStart, trialEnds: new Date(end).toISOString(), daysLeft: paid ? null : Math.max(0, Math.ceil((end - now) / 864e5)), active: !!paid || now < end, paymentUrl: PAYMENT_URL, portalUrl: STRIPE_PORTAL_URL, email: HELP_EMAIL, plans, testPayments: TEST_PAYMENTS, subscription: db.billing || null, ownerExempt: !!(OWNER_PAID && !user), ...(pl => ({ plan: pl ? pl.id : null, planName: pl ? pl.name : null, cycle: (db.billing && (db.billing.cycle || db.billing.period)) || null, truckLimit: pl ? pl.trucks : null, trucks: truckCount(db) }))(planOf(db, user)) };
+  return { paid: !!paid, trialStart: db.trialStart, trialEnds: new Date(end).toISOString(), daysLeft: paid ? null : Math.max(0, Math.ceil((end - now) / 864e5)), active: !!paid || now < end, paymentUrl: PAYMENT_URL, portalUrl: STRIPE_PORTAL_URL, email: HELP_EMAIL, plans, testPayments: TEST_PAYMENTS, subscription: db.billing || null, ownerExempt: !!ownerPaid(user), ...(pl => ({ plan: pl ? pl.id : null, planName: pl ? pl.name : null, cycle: (db.billing && (db.billing.cycle || db.billing.period)) || null, truckLimit: pl ? pl.trucks : null, trucks: truckCount(db) }))(planOf(db, user)) };
 }
 function getDb(user) {
   const f = fileFor(user);
@@ -200,6 +202,7 @@ http.createServer(async (req, res) => {
       if (a === 'kb') { const K = KB.load(), c = p[2], q = String(u.searchParams.get('q') || '').trim(); if (!c) return send(res, 200, KB.overview(D, K)); if (c === 'search') return send(res, 200, KB.search(D, K, q)); if (c === 'dtc') { const code = String(p[3] || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6); return send(res, 200, { code, info: K.dtc[code] || null, shop: [] }); } }
       return send(res, 401, { error: 'auth', demo: true }); }
     const user = storeKey(acct), db = getDb(user);
+    if (OWNER_EMAIL && acct && String(acct.email || '').toLowerCase() === OWNER_EMAIL) OWNER_KEYS.add(user);
     if (a === 'billing' && b === 'consent' && m === 'POST') { /*LEGAL1 auto-renewal consent record (kept; never deleted)*/
       const o = await body(req), plan = PLANS.find(x => x.id === String(o.plan || '').toLowerCase()), cycle = o.cycle === 'yearly' ? 'yearly' : 'monthly';
       if (!plan) return send(res, 400, { error: 'plan must be basic|premium|pro' });

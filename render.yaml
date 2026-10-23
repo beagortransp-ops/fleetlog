@@ -20,5 +20,7 @@ services:
         sync: false
       - key: OWNER_PAID
         value: "true"
+      - key: OWNER_EMAIL
+        sync: false
       - key: PAYMENT_URL
         sync: false
