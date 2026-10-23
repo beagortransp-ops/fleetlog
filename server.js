@@ -187,6 +187,7 @@ http.createServer(async (req, res) => {
     const [, a, b] = p, m = req.method;
     if (a === 'auth') return authRoute(req, res, b); /*ACCTS1*/
     const acct = sessUser(req); /*ACCTS1 user comes from the session cookie only; X-User is ignored*/
+    if (OWNER_EMAIL && acct && String(acct.email || '').toLowerCase() === OWNER_EMAIL) OWNER_KEYS.add(storeKey(acct)); /*OWNERPAID3 before demo/billing paths*/
     const demoReq = req.headers['x-demo'] === '1' || u.searchParams.get('demo') === '1'; /*DEMO2 explicit demo read for anyone; never touches user data*/
     if (demoReq && acct && m !== 'GET') return send(res, 403, { error: 'demo_readonly', demo: true });
     if (!acct || demoReq) { /*DEMO1 logged out (or DEMO2 flag): GETs read the fixed demo store; every write needs an account*/
