@@ -168,7 +168,7 @@ async function contact(req, res) {
   } catch (e) { console.error('contact:', e.message); return send(res, 502, { error: 'Could not send the message. Please email fleetlog.support@gmail.com.' }); }
 }
 /*SHEETSYNC1 add-on gate + background sync every SHEETSYNC_MIN minutes*/
-const SHEETSYNC_PRICE = 25, SHEETSYNC_PAYMENT_URL = String(process.env.SHEETSYNC_PAYMENT_URL || '').trim(), SHEETSYNC_MIN = 10, SS_OPTS = { save: db => save(db), bumpMileage: (db, r) => bumpMileage(db, r) };
+const SHEETSYNC_PRICE = 15, SHEETSYNC_PAYMENT_URL = String(process.env.SHEETSYNC_PAYMENT_URL || '').trim(), SHEETSYNC_MIN = 10, SS_OPTS = { save: db => save(db), bumpMileage: (db, r) => bumpMileage(db, r) };
 const isOwnerKey = key => ownerPaid(key) || (!!OWNER_EMAIL && UDB.users.some(u => storeKey(u) === key && String(u.email || '').toLowerCase() === OWNER_EMAIL));
 const sheetAllowed = (db, key) => !!(db.billing && Array.isArray(db.billing.addons) && db.billing.addons.includes('sheetsync')) || isOwnerKey(key);
 let ssBusy = false;
@@ -244,7 +244,7 @@ http.createServer(async (req, res) => {
       delete db.billing; save(db); syncPlan(acct, db); return send(res, 200, billing(db, user));
     }
     if (TEST_PAYMENTS && u.searchParams.get('testTrialEnd') === '1') { db.trialStart = new Date(Date.now() - 4 * 864e5).toISOString(); save(db); }
-    if (a === 'sheetsync') { /*SHEETSYNC1 $25/mo add-on*/
+    if (a === 'sheetsync') { /*SHEETSYNC1 $15/mo add-on*/
       const ok = sheetAllowed(db, user); let S = db.sheetSync || null;
       const view = () => (S = db.sheetSync || null, { allowed: ok, price: SHEETSYNC_PRICE, paymentUrl: SHEETSYNC_PAYMENT_URL, email: HELP_EMAIL, fields: Object.keys(SS.FIELDS), everyMin: SHEETSYNC_MIN,
         config: S && { url: S.url, tab: S.tab, map: S.map || {}, detected: S.detected || {}, lastRun: S.lastRun, lastError: S.lastError, lastAdded: S.lastAdded, lastAlready: S.lastAlready, totalAdded: S.totalAdded || 0, unknownUnits: S.unknownUnits || [], sentCount: (S.sentRows || []).length } });
