@@ -9,6 +9,7 @@
     document.body.insertAdjacentHTML('beforeend', '<div id="helpBox" style="position:fixed;inset:0;background:#0007;z-index:200;display:flex;align-items:center;justify-content:center;padding:14px;font-family:system-ui,sans-serif" onclick="if(event.target===this)closeHelp()"><form id="helpF" style="background:#fff;border-radius:14px;padding:20px;max-width:440px;width:100%;box-shadow:0 8px 40px #0004;text-align:left" onsubmit="sendHelp(event)">'
       + '<button type="button" onclick="closeHelp()" style="float:right;border:0;background:none;font-size:20px;cursor:pointer;width:auto;padding:0;color:#445" aria-label="Close">✕</button>'
       + '<h3 style="margin:0 0 10px;color:#4d148c">Need help?</h3>'
+      + '<p style="font-size:13px;color:#445;margin:0 0 10px"><b>How to reach us:</b> fill in this form with your name and email, then describe your issue or question (which screen, which truck, what happened). We reply by email.</p>'
       + '<label style="font-size:13px;color:#445">Name<input name="name" required maxlength="100" style="' + st + '"></label>'
       + '<label style="font-size:13px;color:#445">Email (we reply here)<input name="email" type="email" required maxlength="200" value="' + (pre.email || '').replace(/"/g, '') + '" style="' + st + '"></label>'
       + '<label style="font-size:13px;color:#445">Message<textarea name="message" required maxlength="5000" rows="5" style="' + st + ';resize:vertical"></textarea></label>'

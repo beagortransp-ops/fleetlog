@@ -137,7 +137,7 @@ html body.virprint #virF{height:auto!important;min-height:96vh!important}}@media
 <script src="config.js?v=20261024a"></script>
 <script src="auth.js?v=20261024a"></script>
 <script src="logic.js?v=20261024a"></script>
-<script src="contact.js?v=20261024a"></script>
+<script src="contact.js?v=20261024b"></script>
 <script src="legal.js?v=20261024a"></script>
 <script>/*AUTHGUARD1 a script failed to load (e.g. server 502 while Render restarts): reload once, then show a tap-to-reload banner*/
 if (typeof AUTH === 'undefined') { (function () { var k = 'flReload1', d = document.createElement('div'); try { if (!sessionStorage.getItem(k)) { sessionStorage.setItem(k, '1'); setTimeout(function () { location.reload(); }, 1500); } } catch (e) {} d.id = 'loadFail'; d.setAttribute('style', 'position:fixed;left:12px;right:12px;top:12px;z-index:99999;background:#fff8e1;border:2px solid #e09000;border-radius:10px;padding:14px;font:16px system-ui;text-align:center;cursor:pointer;color:#333'); d.innerHTML = '<b>FleetLog couldn&#39;t load.</b> The server may be starting up. Tap here to reload.'; d.onclick = function () { try { sessionStorage.removeItem(k); } catch (e) {} location.reload(); }; (document.body || document.documentElement).appendChild(d); })(); window.AUTH = { demo: false, id: function () { return ''; }, label: function () { return ''; }, role: function () { return 'user'; }, current: async function () { return null; }, login: async function () { throw new Error('FleetLog could not load. Tap the banner to reload.'); }, signup: async function () { throw new Error('FleetLog could not load. Tap the banner to reload.'); }, signOut: function () { location.reload(); } }; } else { try { sessionStorage.removeItem('flReload1'); } catch (e) {} }
