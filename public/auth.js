@@ -7,6 +7,7 @@ const AUTH = (() => {
     demo: false, phoneOn: false,
     id: () => (user && user.id) || '', // kept for localStorage keys only; the server ignores X-User
     label: () => (user && user.email) || '',
+    role: () => (user && user.role) || 'owner', /*TEAM1*/
     async current() { const r = await fetch('/api/auth/me', { credentials: 'same-origin', headers: { 'X-Pin': localStorage.getItem('fmPin') || '' } }); const j = await r.json().catch(() => ({}));
       if (r.status === 401 && j.error === 'pin') { pinScreen(); throw new Error('Sign-in code needed'); } user = r.ok ? j : null; return user; },
     async login(email, password) { user = await post('login', { email, password }); window.DEMO = false; this.demo = false; return user; },

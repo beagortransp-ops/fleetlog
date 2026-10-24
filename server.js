@@ -20,9 +20,10 @@ const sha = x => crypto.createHash('sha256').update(x).digest('hex');
 const hashPw = (pw, salt) => new Promise((ok, no) => crypto.scrypt(pw, salt, 64, (e, k) => e ? no(e) : ok(k.toString('hex'))));
 const cookieOf = req => Object.fromEntries(String(req.headers.cookie || '').split(';').map(x => x.trim().split('=')).filter(x => x[0]).map(([k, ...v]) => [k, decodeURIComponent(v.join('='))]));
 function sessUser(req) { const t = cookieOf(req).fl_sess; if (!t) return null; const s = UDB.sessions[sha(t)]; if (!s || s.exp < Date.now()) return null; return UDB.users.find(u => u.id === s.uid) || null; }
-const storeKey = u => u.legacy ? '' : u.id; // '' = legacy/default store (data.json); keeps ownerExempt for the owner
+function baseKey(u) { return u.legacy ? '' : u.id; } /*TEAM1 own store*/
+const storeKey = u => u.memberOf != null ? u.memberOf : baseKey(u); /*TEAM1 members open the owner's store*/ // '' = legacy/default store (data.json); keeps ownerExempt for the owner
 const setCookie = (req, res, v, maxAge) => res.setHeader('Set-Cookie', `fl_sess=${v}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}` + ((req.socket.encrypted || /https/i.test(String(req.headers['x-forwarded-proto'] || ''))) ? '; Secure' : ''));
-const pubUser = u => ({ id: u.id, email: u.email, plan: u.plan, cycle: u.cycle, activePlan: u.activePlan, createdAt: u.createdAt, legacy: !!u.legacy });
+const pubUser = u => ({ id: u.id, email: u.email, role: roleOf(u), team: u.memberOf != null, plan: u.plan, cycle: u.cycle, activePlan: u.activePlan, createdAt: u.createdAt, legacy: !!u.legacy });
 function legacyHasData() { try { const d = JSON.parse(fs.readFileSync(DATA, 'utf8')); return ['vehicles', 'services', 'parts'].some(c => (d[c] || []).some(x => !x.example)); } catch { return false; } }
 async function authRoute(req, res, b) {
   const m = req.method;
@@ -88,7 +89,7 @@ function planOf(db, user) {
   return PLANS.find(x => x.id === (b && b.plan)) || PLANS.find(x => x.id === 'pro');
 }
 const OWNER_KEYS = new Set(); /*OWNERPAID2 signed-in OWNER_EMAIL account counts as owner*/
-const ownerPaid = user => (OWNER_PAID && !user) || OWNER_KEYS.has(user); /*OWNERPAID4 OWNER_EMAIL match alone is enough*/
+const ownerPaid = user => (OWNER_PAID && !user) || OWNER_KEYS.has(user) || (!!OWNER_EMAIL && UDB.users.some(x => x.memberOf == null && baseKey(x) === user && String(x.email || '').toLowerCase() === OWNER_EMAIL)); /*TEAM1 owner status follows the store, so members inherit it*/ /*OWNERPAID4 OWNER_EMAIL match alone is enough*/
 const truckCount = db => db.vehicles.filter(v => !v.example).length;
 function billing(db, user) {
   const paid = (db.billing && db.billing.status === 'paid') || ownerPaid(user);
@@ -169,11 +170,11 @@ async function contact(req, res) {
 }
 /*SHEETSYNC1 add-on gate + background sync every SHEETSYNC_MIN minutes*/
 const SHEETSYNC_PRICE = 9, SHEETSYNC_PAYMENT_URL = String(process.env.SHEETSYNC_PAYMENT_URL || '').trim(), SHEETSYNC_MIN = 10, SS_OPTS = { save: db => save(db), bumpMileage: (db, r) => bumpMileage(db, r) };
-const isOwnerKey = key => ownerPaid(key) || (!!OWNER_EMAIL && UDB.users.some(u => storeKey(u) === key && String(u.email || '').toLowerCase() === OWNER_EMAIL));
+const isOwnerKey = key => ownerPaid(key) || (!!OWNER_EMAIL && UDB.users.some(u => baseKey(u) === key && String(u.email || '').toLowerCase() === OWNER_EMAIL));
 const sheetAllowed = (db, key) => !!(db.billing && Array.isArray(db.billing.addons) && db.billing.addons.includes('sheetsync')) || isOwnerKey(key);
 let ssBusy = false;
 async function sheetSyncAll() { if (ssBusy) return; ssBusy = true;
-  try { for (const key of new Set(UDB.users.map(storeKey))) { const db = getDb(key); if (!db.sheetSync || !db.sheetSync.url || !sheetAllowed(db, key)) continue;
+  try { for (const key of new Set(UDB.users.map(baseKey))) { const db = getDb(key); if (!db.sheetSync || !db.sheetSync.url || !sheetAllowed(db, key)) continue;
     const r = await SS.run(db, SS_OPTS); if (r.error) console.error('sheetsync', key || 'default', r.error); else if (r.added) console.log('sheetsync', key || 'default', 'added', r.added); } }
   catch (e) { console.error('sheetsync:', e.message); } ssBusy = false; }
 setTimeout(sheetSyncAll, 60 * 1000); setInterval(sheetSyncAll, SHEETSYNC_MIN * 60 * 1000);
@@ -218,10 +219,67 @@ async function driverRoute(req, res, token, action) {
   }
   return send(res, 404, { error: 'no route' });
 }
+/*TEAM1 team members: a member account (memberOf = owner's store key) opens the owner's store with role admin|user. Invites live in users.json.*/
+const roleOf = u => !u ? null : u.memberOf != null ? (u.role === 'admin' ? 'admin' : 'user') : 'owner';
+const storeOwner = key => UDB.users.find(x => x.memberOf == null && baseKey(x) === key) || null;
+const killSessions = uid => { for (const [k, s] of Object.entries(UDB.sessions)) if (s.uid === uid) delete UDB.sessions[k]; };
+const INV_DAYS = 7;
+const invView = i => ({ id: i.id, email: i.email || '', role: i.role, exp: i.exp, createdAt: i.createdAt, token: i.token });
+function teamRoute(req, res, acct, key, b, c) {
+  return (async () => {
+    UDB.invites = (UDB.invites || []).filter(i => i.exp > Date.now());
+    const m = req.method, own = storeOwner(key);
+    if (!b && m === 'GET') return send(res, 200, { me: { id: acct.id, role: roleOf(acct) }, owner: own ? { id: own.id, email: own.email } : null,
+      members: UDB.users.filter(x => x.memberOf === key).map(x => ({ id: x.id, email: x.email, role: roleOf(x), joinedAt: x.joinedAt || x.createdAt })),
+      invites: UDB.invites.filter(i => i.key === key).map(invView) });
+    if (b === 'invite' && m === 'POST' && !c) {
+      const o = await body(req), email = String(o.email || '').trim().toLowerCase().slice(0, 200), role = o.role === 'admin' ? 'admin' : 'user';
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return send(res, 400, { error: 'Enter a valid email or leave it empty.' });
+      if (UDB.invites.filter(i => i.key === key).length >= 50) return send(res, 429, { error: 'Too many pending invites. Revoke some first.' });
+      const i = { id: crypto.randomUUID(), token: crypto.randomBytes(24).toString('base64url'), key, email, role, createdBy: acct.id, createdAt: new Date().toISOString(), exp: Date.now() + INV_DAYS * 864e5 };
+      UDB.invites.push(i); usave(); return send(res, 201, invView(i));
+    }
+    if (b === 'invite' && m === 'DELETE' && c) { const n = UDB.invites.length; UDB.invites = UDB.invites.filter(i => !(i.id === c && i.key === key)); usave(); return send(res, n === UDB.invites.length ? 404 : 200, { ok: n !== UDB.invites.length }); }
+    const t = b && UDB.users.find(x => x.id === b && x.memberOf === key);
+    if (b && !t) return send(res, own && b === own.id ? 403 : 404, { error: own && b === own.id ? 'The account owner cannot be changed or removed.' : 'Member not found' });
+    if (t && m === 'PUT') { const o = await body(req); t.role = o.role === 'admin' ? 'admin' : 'user'; if (t.id !== acct.id) killSessions(t.id); usave(); return send(res, 200, { ok: true, role: t.role }); }
+    if (t && m === 'DELETE') { delete t.memberOf; delete t.role; delete t.joinedAt; killSessions(t.id); usave(); return send(res, 200, { ok: true }); }
+    return send(res, 404, { error: 'no team route' });
+  })();
+}
+async function inviteRoute(req, res, token) { /*TEAM1 public: read or accept an invite*/
+  const now = Date.now(), i = (UDB.invites || []).find(x => x.exp > now && safeEq(sha(x.token), sha(String(token || ''))));
+  if (!i) return send(res, 404, { error: 'This invite link is not valid or has expired. Ask for a new one.' });
+  if (req.method === 'GET') return send(res, 200, { ok: true, role: i.role, email: i.email, exists: !!(i.email && UDB.users.some(u => u.email === i.email)), exp: i.exp });
+  if (req.method !== 'POST') return send(res, 404, { error: 'no route' });
+  const o = await body(req), email = String(o.email || '').trim().toLowerCase().slice(0, 200), pw = String(o.password || '');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return send(res, 400, { error: 'Enter a valid email.' });
+  if (i.email && email !== i.email) return send(res, 400, { error: 'This invite is for a different email address.' });
+  if (pw.length < 8 || pw.length > 200) return send(res, 400, { error: 'Password must be at least 8 characters.' });
+  const k = ipOf(req) + '|' + email, f = (LFAILS.get(k) || []).filter(t => now - t < LWIN);
+  if (f.length >= LMAX) { LFAILS.set(k, f); return send(res, 429, { error: 'Too many tries. Wait 15 minutes and try again.' }); }
+  let u = UDB.users.find(x => x.email === email);
+  if (u) {
+    if (!safeEq(await hashPw(pw, u.salt), u.pwHash)) { f.push(now); LFAILS.set(k, f); return send(res, 401, { error: 'This email already has an account. Enter its password to join.' }); }
+    LFAILS.delete(k);
+    if (u.legacy || baseKey(u) === i.key || (OWNER_EMAIL && u.email === OWNER_EMAIL)) return send(res, 400, { error: 'This account owns a fleet and cannot join another team.' });
+    if (UDB.users.some(x => x.memberOf === baseKey(u))) return send(res, 400, { error: 'This account has its own team members and cannot join another team.' });
+    if (u.memberOf != null && u.memberOf !== i.key) return send(res, 400, { error: 'This account is already on another team. Ask that team to remove it first.' });
+  } else {
+    const salt = crypto.randomBytes(16).toString('hex');
+    u = { id: crypto.randomUUID(), email, salt, pwHash: await hashPw(pw, salt), plan: 'trial', cycle: null, activePlan: 'trial', createdAt: new Date().toISOString() }; UDB.users.push(u);
+  }
+  u.memberOf = i.key; u.role = i.role; u.joinedAt = new Date().toISOString();
+  UDB.invites = UDB.invites.filter(x => x.id !== i.id); // one-time
+  const t = crypto.randomBytes(32).toString('hex'); UDB.sessions[sha(t)] = { uid: u.id, exp: now + SESS_DAYS * 864e5 }; usave();
+  setCookie(req, res, t, SESS_DAYS * 86400); return send(res, 200, pubUser(u));
+}
+const USER_BLOCK = ['billing', 'sheetsync', 'driverlink', 'team', 'example', 'export'], USER_RO = ['intervals', 'profile'];
 http.createServer(async (req, res) => {
   const u = new URL(req.url, 'http://x'), p = u.pathname.split('/').filter(Boolean);
   try {
     if (u.pathname === '/healthz') return send(res, 200, { ok: true, v: 'owner4', ownerEmailSet: !!OWNER_EMAIL, ownerPaidSet: OWNER_PAID });
+    if (p[0] === 'invite' && p[1] && req.method === 'GET') { res.setHeader('Cache-Control', 'no-store'); res.setHeader('Referrer-Policy', 'no-referrer'); return send(res, 200, fs.readFileSync(path.join(PUB, 'invite.html')), 'text/html'); } /*TEAM1*/
     if (p[0] === 'd' && p[1] && req.method === 'GET') { res.setHeader('Cache-Control', 'no-store'); res.setHeader('Referrer-Policy', 'no-referrer'); return send(res, 200, fs.readFileSync(path.join(PUB, 'driver.html')), 'text/html'); } /*DRIVER1*/
     if (p[0] === 'api' && p[1] === 'driver') { res.setHeader('Cache-Control', 'no-store'); return driverRoute(req, res, p[2], p[3]); } /*DRIVER1 public, token-scoped*/
     if (p[0] !== 'api') {
@@ -240,6 +298,7 @@ http.createServer(async (req, res) => {
     }
     const [, a, b] = p, m = req.method;
     if (a === 'auth') return authRoute(req, res, b); /*ACCTS1*/
+    if (a === 'invite') return inviteRoute(req, res, b); /*TEAM1*/
     const acct = sessUser(req); /*ACCTS1 user comes from the session cookie only; X-User is ignored*/
     if (OWNER_EMAIL && acct && String(acct.email || '').toLowerCase() === OWNER_EMAIL) OWNER_KEYS.add(storeKey(acct)); /*OWNERPAID3 before demo/billing paths*/
     const demoReq = req.headers['x-demo'] === '1' || u.searchParams.get('demo') === '1'; /*DEMO2 explicit demo read for anyone; never touches user data*/
@@ -257,6 +316,10 @@ http.createServer(async (req, res) => {
       if (a === 'kb') { const K = KB.load(), c = p[2], q = String(u.searchParams.get('q') || '').trim(); if (!c) return send(res, 200, KB.overview(D, K)); if (c === 'search') return send(res, 200, KB.search(D, K, q)); if (c === 'dtc') { const code = String(p[3] || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6); return send(res, 200, { code, info: K.dtc[code] || null, shop: [] }); } }
       return send(res, 401, { error: 'auth', demo: true }); }
     const user = storeKey(acct), db = getDb(user);
+    { const rl = roleOf(acct); /*TEAM1 server-side role checks*/
+      if (rl === 'user' && (USER_BLOCK.includes(a) || (USER_RO.includes(a) && m !== 'GET') || (a === 'kb' && p[2] === 'refresh'))) return send(res, 403, { error: 'Your role (User) cannot do this. Ask the account owner or an admin.', role: rl });
+      if (a === 'team') return teamRoute(req, res, acct, user, b, p[3]);
+      if (rl === 'user' && a === 'state' && m === 'GET') { const bl0 = billing(db, user); if (!bl0.active) return send(res, 402, { error: 'trial_ended' }); const o = { ...db }; delete o.driverLink; delete o.sheetSync; delete o.billing; delete o.consents; return send(res, 200, o); } }
     if (OWNER_EMAIL && acct && String(acct.email || '').toLowerCase() === OWNER_EMAIL) OWNER_KEYS.add(user);
     if (a === 'billing' && b === 'consent' && m === 'POST') { /*LEGAL1 auto-renewal consent record (kept; never deleted)*/
       const o = await body(req), plan = PLANS.find(x => x.id === String(o.plan || '').toLowerCase()), cycle = o.cycle === 'yearly' ? 'yearly' : 'monthly';
