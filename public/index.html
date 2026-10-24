@@ -524,7 +524,7 @@ const VIEWS = {
     ${f('Maintenance Record for the Month and Year of:', '', true) /*MMRCLEAN*/}${f('Domicile Station/Hub:', esc(((db.profile || [])[0] || {}).hub || ''), 'hub')}
     ${f('Service Provider Company Name:', esc(((db.profile || [])[0] || {}).company || ''), 'company')}${f('Current Mileage* (Odometer Reading):', miles ? String(Number(miles)) : '')}
     ${f('Vehicle Unit #:', esc(v.truck || ''))}<div style="font-size:8px;padding-top:2px">*If reading has decreased due to odometer repair/replacement, proof should also be provided. If unit is undergoing repair and unavailable, "N/A" may be utilized for current mileage.</div></div>
-    ${yn('Were any repairs, or preventative maintenance performed on this unit?', rows.length ? true : undefined, 'rep') /*MMRAUTOYES*/}
+    ${yn('Were any repairs, or preventative maintenance performed on this unit?', rows.length > 0, 'rep') /*MMRAUTOYES yes if entries, no if none*/}
     ${yn('If "no" maintenance was performed, was the unit out of service and unable to provide service (i.e., awaiting repair, on litigation hold, etc.)?', undefined, 'oos')}
     <p style="margin:6px 0 4px">All repairs/replacements, or maintenance performed in conformance with a vehicle's Maintenance Interval Form or any other major vehicle system must be reported on an MMR with detailed notations or attached receipts.</p>
     <p style="margin:0 0 4px">All notations must provide enough detail for a DOT official to determine what component(s), location(s), and type of work was performed (e.g., replace, repair, adjust, etc.).</p>
