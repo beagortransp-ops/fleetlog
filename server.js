@@ -94,7 +94,7 @@ function billing(db, user) {
   const paid = (db.billing && db.billing.status === 'paid') || ownerPaid(user);
   const start = Date.parse(db.trialStart) || Date.now(), end = start + TRIAL_DAYS * 864e5, now = Date.now();
   const plans = PLANS.map(p => ({ ...p, links: { monthly: linkFor(p.id, 'monthly', user), yearly: linkFor(p.id, 'yearly', user) } }));
-  return { paid: !!paid, trialStart: db.trialStart, trialEnds: new Date(end).toISOString(), daysLeft: paid ? null : Math.max(0, Math.ceil((end - now) / 864e5)), active: !!paid || now < end, paymentUrl: PAYMENT_URL, portalUrl: STRIPE_PORTAL_URL, email: HELP_EMAIL, plans, testPayments: TEST_PAYMENTS, subscription: db.billing || null, ownerExempt: !!ownerPaid(user), ...(pl => ({ plan: pl ? pl.id : null, planName: pl ? pl.name : null, cycle: (db.billing && (db.billing.cycle || db.billing.period)) || null, truckLimit: pl ? pl.trucks : null, trucks: truckCount(db) }))(planOf(db, user)) };
+  return { paid: !!paid, trialStart: db.trialStart, trialEnds: new Date(end).toISOString(), daysLeft: paid ? null : Math.max(0, Math.ceil((end - now) / 864e5)), active: !!paid || now < end, paymentUrl: PAYMENT_URL, portalUrl: STRIPE_PORTAL_URL, email: HELP_EMAIL, plans, testPayments: TEST_PAYMENTS, subscription: db.billing || null, ownerExempt: !!ownerPaid(user), sheetSync: { price: SHEETSYNC_PRICE, paymentUrl: SHEETSYNC_PAYMENT_URL, included: !!ownerPaid(user), active: !!ownerPaid(user) || !!(db.billing && Array.isArray(db.billing.addons) && db.billing.addons.includes('sheetsync')) }, /*ADDONS1*/ ...(pl => ({ plan: pl ? pl.id : null, planName: pl ? pl.name : null, cycle: (db.billing && (db.billing.cycle || db.billing.period)) || null, truckLimit: pl ? pl.trucks : null, trucks: truckCount(db) }))(planOf(db, user)) };
 }
 function getDb(user) {
   const f = fileFor(user);
@@ -168,7 +168,7 @@ async function contact(req, res) {
   } catch (e) { console.error('contact:', e.message); return send(res, 502, { error: 'Could not send the message. Please email fleetlog.support@gmail.com.' }); }
 }
 /*SHEETSYNC1 add-on gate + background sync every SHEETSYNC_MIN minutes*/
-const SHEETSYNC_PRICE = 15, SHEETSYNC_PAYMENT_URL = String(process.env.SHEETSYNC_PAYMENT_URL || '').trim(), SHEETSYNC_MIN = 10, SS_OPTS = { save: db => save(db), bumpMileage: (db, r) => bumpMileage(db, r) };
+const SHEETSYNC_PRICE = 9, SHEETSYNC_PAYMENT_URL = String(process.env.SHEETSYNC_PAYMENT_URL || '').trim(), SHEETSYNC_MIN = 10, SS_OPTS = { save: db => save(db), bumpMileage: (db, r) => bumpMileage(db, r) };
 const isOwnerKey = key => ownerPaid(key) || (!!OWNER_EMAIL && UDB.users.some(u => storeKey(u) === key && String(u.email || '').toLowerCase() === OWNER_EMAIL));
 const sheetAllowed = (db, key) => !!(db.billing && Array.isArray(db.billing.addons) && db.billing.addons.includes('sheetsync')) || isOwnerKey(key);
 let ssBusy = false;
@@ -244,7 +244,7 @@ http.createServer(async (req, res) => {
       delete db.billing; save(db); syncPlan(acct, db); return send(res, 200, billing(db, user));
     }
     if (TEST_PAYMENTS && u.searchParams.get('testTrialEnd') === '1') { db.trialStart = new Date(Date.now() - 4 * 864e5).toISOString(); save(db); }
-    if (a === 'sheetsync') { /*SHEETSYNC1 $15/mo add-on*/
+    if (a === 'sheetsync') { /*SHEETSYNC1 $9/mo add-on (price set by SHEETSYNC_PRICE)*/
       const ok = sheetAllowed(db, user); let S = db.sheetSync || null;
       const view = () => (S = db.sheetSync || null, { allowed: ok, price: SHEETSYNC_PRICE, paymentUrl: SHEETSYNC_PAYMENT_URL, email: HELP_EMAIL, fields: Object.keys(SS.FIELDS), everyMin: SHEETSYNC_MIN,
         config: S && { url: S.url, tab: S.tab, map: S.map || {}, detected: S.detected || {}, lastRun: S.lastRun, lastError: S.lastError, lastAdded: S.lastAdded, lastAlready: S.lastAlready, totalAdded: S.totalAdded || 0, unknownUnits: S.unknownUnits || [], sentCount: (S.sentRows || []).length } });
