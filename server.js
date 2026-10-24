@@ -3,6 +3,7 @@
 const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto');
 const L = require('./public/logic.js');
 const KB = require('./kb.js'); /*KBASE1*/
+const SS = require('./sheetsync.js'); /*SHEETSYNC1*/
 const PORT = process.env.PORT || 8790, DATA_DIR = path.resolve(process.env.DATA_DIR || path.join(__dirname, 'data')), DATA = path.join(DATA_DIR, 'data.json'), PUB = path.join(__dirname, 'public');
 fs.mkdirSync(DATA_DIR, { recursive: true });
 { const kc = path.join(DATA_DIR, 'kb-cache.json'), seed = path.join(__dirname, 'seed', 'kb-cache.json'); if (!fs.existsSync(kc) && fs.existsSync(seed)) fs.copyFileSync(seed, kc); }
@@ -166,6 +167,16 @@ async function contact(req, res) {
     return send(res, 200, { ok: true });
   } catch (e) { console.error('contact:', e.message); return send(res, 502, { error: 'Could not send the message. Please email fleetlog.support@gmail.com.' }); }
 }
+/*SHEETSYNC1 add-on gate + background sync every SHEETSYNC_MIN minutes*/
+const SHEETSYNC_PRICE = 25, SHEETSYNC_PAYMENT_URL = String(process.env.SHEETSYNC_PAYMENT_URL || '').trim(), SHEETSYNC_MIN = 10, SS_OPTS = { save: db => save(db), bumpMileage: (db, r) => bumpMileage(db, r) };
+const isOwnerKey = key => ownerPaid(key) || (!!OWNER_EMAIL && UDB.users.some(u => storeKey(u) === key && String(u.email || '').toLowerCase() === OWNER_EMAIL));
+const sheetAllowed = (db, key) => !!(db.billing && Array.isArray(db.billing.addons) && db.billing.addons.includes('sheetsync')) || isOwnerKey(key);
+let ssBusy = false;
+async function sheetSyncAll() { if (ssBusy) return; ssBusy = true;
+  try { for (const key of new Set(UDB.users.map(storeKey))) { const db = getDb(key); if (!db.sheetSync || !db.sheetSync.url || !sheetAllowed(db, key)) continue;
+    const r = await SS.run(db, SS_OPTS); if (r.error) console.error('sheetsync', key || 'default', r.error); else if (r.added) console.log('sheetsync', key || 'default', 'added', r.added); } }
+  catch (e) { console.error('sheetsync:', e.message); } ssBusy = false; }
+setTimeout(sheetSyncAll, 60 * 1000); setInterval(sheetSyncAll, SHEETSYNC_MIN * 60 * 1000);
 http.createServer(async (req, res) => {
   const u = new URL(req.url, 'http://x'), p = u.pathname.split('/').filter(Boolean);
   try {
@@ -233,6 +244,22 @@ http.createServer(async (req, res) => {
       delete db.billing; save(db); syncPlan(acct, db); return send(res, 200, billing(db, user));
     }
     if (TEST_PAYMENTS && u.searchParams.get('testTrialEnd') === '1') { db.trialStart = new Date(Date.now() - 4 * 864e5).toISOString(); save(db); }
+    if (a === 'sheetsync') { /*SHEETSYNC1 $25/mo add-on*/
+      const ok = sheetAllowed(db, user); let S = db.sheetSync || null;
+      const view = () => (S = db.sheetSync || null, { allowed: ok, price: SHEETSYNC_PRICE, paymentUrl: SHEETSYNC_PAYMENT_URL, email: HELP_EMAIL, fields: Object.keys(SS.FIELDS), everyMin: SHEETSYNC_MIN,
+        config: S && { url: S.url, tab: S.tab, map: S.map || {}, detected: S.detected || {}, lastRun: S.lastRun, lastError: S.lastError, lastAdded: S.lastAdded, lastAlready: S.lastAlready, totalAdded: S.totalAdded || 0, unknownUnits: S.unknownUnits || [], sentCount: (S.sentRows || []).length } });
+      if (m === 'GET' && !b) return send(res, 200, view());
+      if (!ok) return send(res, 402, { error: 'Sheet Sync is a paid add-on ($' + SHEETSYNC_PRICE + '/month).', ...view() });
+      if (m === 'PUT' && !b) { const o = await body(req), url = String(o.url || '').trim().slice(0, 500), tab = String(o.tab || '').trim().slice(0, 100);
+        try { SS.csvUrl(url, tab); } catch (e) { return send(res, 400, { error: e.message }); }
+        const map = Object.fromEntries(Object.entries(o.map || {}).filter(([k, v]) => SS.FIELDS[k] && v).map(([k, v]) => [k, String(v).slice(0, 100)]));
+        const changed = !S || S.url !== url || S.tab !== tab;
+        db.sheetSync = { ...(S || {}), url, tab, map, sentRows: changed ? [] : (S.sentRows || []) }; save(db);
+        const r = await SS.run(db, SS_OPTS, o.skipExisting && changed ? 'skip' : null); return send(res, r.error ? 400 : 200, { ...view(), result: r }); }
+      if (m === 'POST' && b === 'run') { if (!S) return send(res, 400, { error: 'Set up the sheet first' }); const r = await SS.run(db, SS_OPTS); return send(res, 200, { ...view(), result: r }); }
+      if (m === 'DELETE' && !b) { delete db.sheetSync; save(db); return send(res, 200, view()); }
+      return send(res, 404, { error: 'no route' });
+    }
     if (a === 'billing') return send(res, 200, billing(db, user));
     const bl = billing(db, user);
     if (!bl.active) return send(res, 402, { error: 'trial_ended', ...bl });

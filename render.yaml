@@ -24,3 +24,5 @@ services:
         sync: false
       - key: PAYMENT_URL
         sync: false
+      - key: SHEETSYNC_PAYMENT_URL
+        sync: false
