@@ -1,0 +1,52 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Report a truck problem</title>
+<style>*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,sans-serif;background:#f3f4f9;color:#1d1f3a}header{background:linear-gradient(135deg,#4d148c,#2a0a52);color:#fff;padding:18px 16px}header h1{margin:0;font-size:21px}header p{margin:4px 0 0;opacity:.85;font-size:14px}
+main{max-width:520px;margin:0 auto;padding:14px}label{display:block;font-weight:700;font-size:15px;margin:14px 0 6px}input,select,textarea{width:100%;font-size:17px;padding:13px;border:1.5px solid #cfd2e3;border-radius:12px;background:#fff;font-family:inherit}textarea{min-height:96px}
+.ph{display:flex;gap:10px}.ph button{flex:1}button{font-size:17px;font-weight:700;border:0;border-radius:12px;padding:15px;cursor:pointer}.sec{background:#fff;color:#4d148c;border:1.5px solid #4d148c}.go{width:100%;background:#ff6200;color:#fff;margin-top:20px;font-size:19px;padding:17px}.go:disabled{opacity:.6}
+#prev{display:none;margin-top:10px;position:relative}#prev img{width:100%;border-radius:12px;max-height:320px;object-fit:cover}#prev button{position:absolute;top:8px;right:8px;background:#000a;color:#fff;padding:6px 11px;font-size:14px}
+.chk{display:flex;gap:10px;align-items:center;font-weight:500;font-size:15px;margin-top:14px}.chk input{width:22px;height:22px}.msg{padding:12px;border-radius:10px;margin-top:12px;font-size:15px}.err{background:#fdecec;color:#a11}.ok{background:#e8f5e9;color:#1b5e20;text-align:center;padding:26px 14px}.ok b{display:block;font-size:22px;margin-bottom:6px}.hint{font-size:12px;color:#667;margin-top:4px}</style></head>
+<body><header><h1>Report a truck problem</h1><p>Send a photo and a short note to the shop.</p></header><main id="m"><p>Loading…</p></main>
+<script>
+const T = location.pathname.split('/')[2] || '', $ = s => document.querySelector(s), esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+let photo = null, trucks = [];
+async function load() {
+  const r = await fetch('/api/driver/' + encodeURIComponent(T) + '/trucks'); const j = await r.json().catch(() => ({}));
+  if (!r.ok) { $('#m').innerHTML = `<div class="msg err">${esc(j.error || 'This link is not working.')}</div>`; return; }
+  trucks = j.trucks; form();
+}
+function form() {
+  const last = localStorage.getItem('dlTruck') || '';
+  $('#m').innerHTML = `<form id="f" autocomplete="off"><label>Your name</label><input name="driver" required maxlength="60" value="${esc(localStorage.getItem('dlName') || '')}" placeholder="First and last name">
+  <label>Truck</label><select name="vehicleId" required><option value="">Pick a truck…</option>${trucks.map(t => `<option value="${t.id}" ${t.id === last ? 'selected' : ''}>${esc(t.truck)}${t.desc ? ' · ' + esc(t.desc) : ''}</option>`).join('')}</select>
+  <label>Photo</label><div class="ph"><button type="button" class="sec" onclick="$('#cam').click()">📷 Take photo</button><button type="button" class="sec" onclick="$('#gal').click()">🖼️ Choose</button></div>
+  <input id="cam" type="file" accept="image/*" capture="environment" hidden><input id="gal" type="file" accept="image/*" hidden><div id="prev"><img alt="Photo preview"><button type="button" onclick="clearPhoto()">✕ Remove</button></div>
+  <label>What's wrong?</label><textarea name="description" maxlength="1000" placeholder="Example: Left rear tire low, air leak near the valve"></textarea>
+  <label class="chk"><input type="checkbox" name="geo" checked> Share my location with this report</label><div class="hint">Only used to show where the truck is. You can turn this off.</div>
+  <div id="e"></div><button class="go" id="sb">Send report</button></form>`;
+  ['#cam', '#gal'].forEach(s => $(s).onchange = e => e.target.files[0] && pick(e.target.files[0]));
+  $('#f').onsubmit = submit;
+}
+async function pick(file) {
+  try { photo = await shrink(file); $('#prev img').src = photo; $('#prev').style.display = 'block'; } catch { err('Could not read that photo. Try another one.'); }
+}
+function clearPhoto() { photo = null; $('#prev').style.display = 'none'; $('#cam').value = $('#gal').value = ''; }
+async function shrink(file) {
+  const bmp = await (window.createImageBitmap ? createImageBitmap(file, { imageOrientation: 'from-image' }).catch(() => null) : null) || await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = URL.createObjectURL(file); });
+  const W = bmp.width, H = bmp.height, s = Math.min(1, 1600 / Math.max(W, H)), c = document.createElement('canvas');
+  c.width = Math.round(W * s); c.height = Math.round(H * s); c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+  let q = .82, out = c.toDataURL('image/jpeg', q); while (out.length > 2.8e6 && q > .4) { q -= .12; out = c.toDataURL('image/jpeg', q); } return out;
+}
+const err = t => $('#e').innerHTML = `<div class="msg err">${esc(t)}</div>`;
+const geo = () => new Promise(ok => { if (!navigator.geolocation) return ok(null); navigator.geolocation.getCurrentPosition(p => ok(p.coords), () => ok(null), { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }); });
+async function submit(e) {
+  e.preventDefault(); const f = e.target, o = { driver: f.driver.value.trim(), vehicleId: f.vehicleId.value, description: f.description.value.trim(), photo };
+  if (!o.driver) return err('Enter your name.'); if (!o.vehicleId) return err('Pick a truck.'); if (!o.description && !photo) return err('Add a photo or a description.');
+  localStorage.setItem('dlName', o.driver); localStorage.setItem('dlTruck', o.vehicleId);
+  const b = $('#sb'); b.disabled = true; b.textContent = 'Sending…';
+  if (f.geo.checked) { const c = await geo(); if (c) Object.assign(o, { lat: c.latitude, lng: c.longitude, accuracy: c.accuracy }); }
+  try { const r = await fetch('/api/driver/' + encodeURIComponent(T) + '/report', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(o) }); const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || 'Could not send. Try again.');
+    photo = null; $('#m').innerHTML = `<div class="msg ok"><b>✓ Report sent</b>Thank you. The shop has your report.</div><button class="go" onclick="form()">Report another problem</button>`;
+  } catch (x) { err(x.message); b.disabled = false; b.textContent = 'Send report'; }
+}
+load();
+</script></body></html>

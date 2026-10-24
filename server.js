@@ -58,7 +58,7 @@ if (!PIN_HASH) console.warn('WARNING: PIN_HASH not set – API is open. Set it b
 const FAILS = new Map(), MAXF = 5, WIN = 15 * 60 * 1000; // wrong-PIN limit: 5 per 15 min per IP
 const ipOf = req => String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || '?';
 const safeEq = (a, b) => a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
-const COLS = ['vehicles', 'services', 'parts', 'quotes', 'intervals', 'mileageLog', 'profile', 'inspections', 'kbFixes', 'vir']; /*VIRFORM*/
+const COLS = ['vehicles', 'services', 'parts', 'quotes', 'intervals', 'mileageLog', 'profile', 'inspections', 'kbFixes', 'vir', 'driverReports']; /*VIRFORM*/ /*DRIVER1*/
 const DEFAULT_INTERVALS = [
   ['Oil change', 7500, 6], ['Tire rotation', 10000, 6], ['Tires', 50000, 48], ['Brakes', 40000, null],
   ['Battery', null, 48], ['Transmission fluid', 60000, null], ['Coolant', 100000, 60], ['Air filter', 20000, 12],
@@ -177,10 +177,53 @@ async function sheetSyncAll() { if (ssBusy) return; ssBusy = true;
     const r = await SS.run(db, SS_OPTS); if (r.error) console.error('sheetsync', key || 'default', r.error); else if (r.added) console.log('sheetsync', key || 'default', 'added', r.added); } }
   catch (e) { console.error('sheetsync:', e.message); } ssBusy = false; }
 setTimeout(sheetSyncAll, 60 * 1000); setInterval(sheetSyncAll, SHEETSYNC_MIN * 60 * 1000);
+/*DRIVER1 driver defect reports via a secret per-account link (/d/<token>). The link can only list trucks and submit reports.*/
+const DLFILE = path.join(DATA_DIR, 'driver-links.json'), PHOTO_DIR = path.join(DATA_DIR, 'photos');
+const DLINKS = (() => { try { return JSON.parse(fs.readFileSync(DLFILE, 'utf8')); } catch { return {}; } })(); // sha(token) -> storeKey
+const dlsave = () => { fs.writeFileSync(DLFILE + '.tmp', JSON.stringify(DLINKS)); fs.renameSync(DLFILE + '.tmp', DLFILE); };
+const photoDir = user => path.join(PHOTO_DIR, crypto.createHash('sha256').update('p|' + user).digest('hex').slice(0, 24));
+const DRATE = new Map(); // key -> timestamps
+const rateOk = (k, max, win) => { const now = Date.now(), f = (DRATE.get(k) || []).filter(t => now - t < win); if (f.length >= max) { DRATE.set(k, f); return false; } f.push(now); DRATE.set(k, f); return true; };
+const bodyMax = (req, max) => new Promise((ok, no) => { let s = '', n = 0; req.on('data', c => { n += c.length; if (n <= max) s += c; else s = ''; }); req.on('end', () => { if (n > max) return no(Object.assign(new Error('too large'), { code: 413 })); try { ok(s ? JSON.parse(s) : {}); } catch (e) { no(e); } }); });
+function driverLinkView(db) { return db.driverLink ? { token: db.driverLink.token, createdAt: db.driverLink.createdAt } : null; }
+function driverLinkNew(db, user) { if (db.driverLink) delete DLINKS[sha(db.driverLink.token)]; const token = crypto.randomBytes(18).toString('base64url'); db.driverLink = { token, createdAt: new Date().toISOString() }; DLINKS[sha(token)] = user; dlsave(); save(db); }
+function driverLinkOff(db) { if (db.driverLink) { delete DLINKS[sha(db.driverLink.token)]; dlsave(); } delete db.driverLink; save(db); }
+async function driverRoute(req, res, token, action) {
+  const key = DLINKS[sha(String(token || ''))];
+  if (key == null) return send(res, 404, { error: 'This driver link is not valid. Ask your fleet manager for the current link.' });
+  const db = getDb(key);
+  if (!db.driverLink || !safeEq(sha(db.driverLink.token), sha(token))) return send(res, 404, { error: 'This driver link is not valid.' });
+  if (!billing(db, key).active) return send(res, 402, { error: 'Reporting is paused for this fleet account.' });
+  if (action === 'trucks' && req.method === 'GET') return send(res, 200, { trucks: db.vehicles.filter(v => !v.example).map(v => ({ id: v.id, truck: v.truck, desc: [v.year, v.make, v.model].filter(Boolean).join(' ') })) });
+  if (action === 'report' && req.method === 'POST') {
+    const ip = ipOf(req);
+    if (!rateOk('ip|' + ip, 30, 3600e3) || !rateOk('acct|' + key, 200, 864e5)) return send(res, 429, { error: 'Too many reports. Please wait and try again.' });
+    let o; try { o = await bodyMax(req, 4.5e6); } catch (e) { return send(res, e.code === 413 ? 413 : 400, { error: e.code === 413 ? 'Photo is too large (max about 3 MB).' : 'Bad request' }); }
+    const v = db.vehicles.find(x => x.id === o.vehicleId && !x.example);
+    const driver = String(o.driver || '').trim().slice(0, 60), desc = String(o.description || '').trim().slice(0, 1000);
+    if (!v) return send(res, 400, { error: 'Pick a truck.' });
+    if (!driver) return send(res, 400, { error: 'Enter your name.' });
+    if (!desc && !o.photo) return send(res, 400, { error: 'Add a photo or a description.' });
+    const rec = { id: crypto.randomUUID(), vehicleId: v.id, driver, description: desc, createdAt: new Date().toISOString(), status: 'open', photo: null, lat: null, lng: null, accuracy: null };
+    const la = Number(o.lat), lo = Number(o.lng);
+    if (o.lat != null && Number.isFinite(la) && Number.isFinite(lo) && Math.abs(la) <= 90 && Math.abs(lo) <= 180) { rec.lat = Math.round(la * 1e5) / 1e5; rec.lng = Math.round(lo * 1e5) / 1e5; rec.accuracy = Math.round(Number(o.accuracy) || 0) || null; }
+    if (o.photo) {
+      const mt = /^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/.exec(String(o.photo));
+      if (!mt) return send(res, 400, { error: 'Photo must be a JPEG.' });
+      const buf = Buffer.from(mt[1], 'base64');
+      if (buf.length > 3.2e6 || buf[0] !== 0xff || buf[1] !== 0xd8) return send(res, 400, { error: 'Photo is not a valid JPEG or is too large.' });
+      const dir = photoDir(key); fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(path.join(dir, rec.id + '.jpg'), buf); rec.photo = rec.id + '.jpg';
+    }
+    db.driverReports.push(rec); save(db); return send(res, 201, { ok: true, id: rec.id });
+  }
+  return send(res, 404, { error: 'no route' });
+}
 http.createServer(async (req, res) => {
   const u = new URL(req.url, 'http://x'), p = u.pathname.split('/').filter(Boolean);
   try {
     if (u.pathname === '/healthz') return send(res, 200, { ok: true, v: 'owner4', ownerEmailSet: !!OWNER_EMAIL, ownerPaidSet: OWNER_PAID });
+    if (p[0] === 'd' && p[1] && req.method === 'GET') { res.setHeader('Cache-Control', 'no-store'); res.setHeader('Referrer-Policy', 'no-referrer'); return send(res, 200, fs.readFileSync(path.join(PUB, 'driver.html')), 'text/html'); } /*DRIVER1*/
+    if (p[0] === 'api' && p[1] === 'driver') { res.setHeader('Cache-Control', 'no-store'); return driverRoute(req, res, p[2], p[3]); } /*DRIVER1 public, token-scoped*/
     if (p[0] !== 'api') {
       const f = path.join(PUB, u.pathname === '/' ? 'index.html' : ({ '/terms': 'terms.html', '/privacy': 'privacy.html', '/refund': 'refund.html', '/refunds': 'refund.html' })[u.pathname.replace(/\/+$/, '')] /*LEGAL1 public legal pages*/ || path.normalize(u.pathname).replace(/^\/+/, ''));
       if (!f.startsWith(PUB) || !fs.existsSync(f)) return send(res, 404, 'Not found', 'text/plain');
@@ -264,6 +307,14 @@ http.createServer(async (req, res) => {
     const bl = billing(db, user);
     if (!bl.active) return send(res, 402, { error: 'trial_ended', ...bl });
     if (a === 'state' && m === 'GET') return send(res, 200, db);
+    if (a === 'driverlink') { /*DRIVER1*/
+      if (m === 'GET') return send(res, 200, { link: driverLinkView(db) });
+      if (m === 'POST') { driverLinkNew(db, user); return send(res, 200, { link: driverLinkView(db) }); }
+      if (m === 'DELETE') { driverLinkOff(db); return send(res, 200, { link: null }); } }
+    if (a === 'photo' && m === 'GET') { const id = String(b || '').replace(/[^a-f0-9-]/g, ''), r = db.driverReports.find(x => x.id === id && x.photo);
+      if (!r) return send(res, 404, { error: 'not found' }); const f = path.join(photoDir(user), r.photo); if (!fs.existsSync(f)) return send(res, 404, { error: 'not found' });
+      res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'private, max-age=86400' }); return res.end(fs.readFileSync(f)); }
+    if (a === 'driverReports' && m === 'DELETE' && b) { const r = db.driverReports.find(x => x.id === b); if (r && r.photo) try { fs.unlinkSync(path.join(photoDir(user), r.photo)); } catch {} }
     if (a === 'dashboard') return send(res, 200, L.dashboard(db));
     if (a === 'predictions') return send(res, 200, L.predictions(db));
     if (a === 'quotes-summary') return send(res, 200, L.quoteGroups(db));
