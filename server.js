@@ -103,7 +103,7 @@ function getDb(user) {
   let d; try { d = JSON.parse(fs.readFileSync(f, 'utf8')); } catch { d = null; }
   if (!d) d = { intervals: DEFAULT_INTERVALS.map(x => ({ ...x, id: crypto.randomUUID() })) };
   for (const c of COLS) d[c] = d[c] || [];
-  if (d.laborRate == null) d.laborRate = 150; /*LABOR1 account labor rate $/h*/
+  if (d.laborRate == null) d.laborRate = 150; if (d.taxRate == null) d.taxRate = 8.875; /*TAXRATE1*/ /*LABOR1 account labor rate $/h*/
   Object.defineProperty(d, '_file', { value: f, enumerable: false });
   DBS.set(f, d); if (!d.trialStart) { d.trialStart = new Date().toISOString(); fs.writeFileSync(f + '.tmp', JSON.stringify(d, null, 2)); fs.renameSync(f + '.tmp', f); } return d;
 }
@@ -141,7 +141,7 @@ function demoDb() {
 }
 const send = (res, code, body, type = 'application/json') => { res.writeHead(code, { 'Content-Type': type }); res.end(type === 'application/json' ? JSON.stringify(body) : body); };
 const body = req => new Promise((ok, no) => { let s = ''; req.on('data', c => s += c); req.on('end', () => { try { ok(s ? JSON.parse(s) : {}); } catch (e) { no(e); } }); });
-const NUMS = ['mileage', 'cost', 'laborHours', 'laborCost', 'downtimeDays', 'price', 'year', 'miles', 'months'];
+const NUMS = ['mileage', 'cost', 'laborHours', 'laborCost', 'taxRate', 'tax', 'downtimeDays', 'price', 'year', 'miles', 'months'];
 function clean(o) { const r = { ...o }; delete r.id; for (const k of NUMS) if (k in r) r[k] = r[k] === '' || r[k] == null ? null : (Number(String(r[k]).replace(/[^0-9.-]/g, '')) || 0); return r; }
 function bumpMileage(db, rec) {
   const v = db.vehicles.find(v => v.id === rec.vehicleId);
@@ -383,6 +383,7 @@ http.createServer(async (req, res) => {
     if (a === 'predictions') return send(res, 200, L.predictions(db));
     if (a === 'quotes-summary') return send(res, 200, L.quoteGroups(db));
     if (a === 'example' && m === 'POST') { example(db); save(db); return send(res, 200, { ok: true }); }
+    if (a === 'taxrate' && m === 'PUT') { if (roleOf(acct) === 'user') return send(res, 403, { error: 'Only owners and admins can change the tax rate.' }); const o = await body(req), rs = String(o.rate ?? '').replace(/[^0-9.]/g, ''), r = rs === '' ? NaN : Number(rs); if (!(r >= 0 && r < 100)) return send(res, 400, { error: 'Enter a tax rate in %.' }); db.taxRate = Math.round(r * 1000) / 1000; save(db); return send(res, 200, { taxRate: db.taxRate }); } /*TAXRATE1*/
     if (a === 'labor' && m === 'PUT') { if (roleOf(acct) === 'user') return send(res, 403, { error: 'Only owners and admins can change the labor rate.' }); const o = await body(req), rs = String(o.rate ?? '').replace(/[^0-9.]/g, ''), r = rs === '' ? NaN : Number(rs); if (!(r >= 0 && r < 10000)) return send(res, 400, { error: 'Enter a labor rate in $ per hour.' }); db.laborRate = Math.round(r * 100) / 100; save(db); return send(res, 200, { laborRate: db.laborRate }); } /*LABOR1*/
     if (a === 'example' && m === 'DELETE') { for (const c of COLS) if (c !== 'intervals') db[c] = db[c].filter(x => !x.example); save(db); return send(res, 200, { ok: true }); }
     if (a === 'export') {
