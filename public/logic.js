@@ -58,9 +58,9 @@
     const costItems = [...db.services.map(s => ({ ...s, kind: 'service' })), ...db.parts.map(p => ({ ...p, kind: 'part' }))];
     const perTruck = db.vehicles.map(v => {
       const mine = costItems.filter(c => c.vehicleId === v.id);
-      const monthly = months.map(m => ({ month: m, spend: mine.filter(c => (c.date || '').startsWith(m)).reduce((a, c) => a + num(c.cost), 0) }));
+      const monthly = months.map(m => ({ month: m, spend: mine.filter(c => (c.date || '').startsWith(m)).reduce((a, c) => a + (typeof LABOR_TOT === 'function' && c.kind === 'service' ? LABOR_TOT(c) : num(c.cost)), 0) }));
       return { vehicleId: v.id, truck: v.truck, monthly,
-        totalSpend: mine.reduce((a, c) => a + num(c.cost), 0),
+        totalSpend: mine.reduce((a, c) => a + (typeof LABOR_TOT === 'function' && c.kind === 'service' ? LABOR_TOT(c) : num(c.cost)), 0),
         downtimeDays: db.services.filter(s => s.vehicleId === v.id).reduce((a, s) => a + num(s.downtimeDays), 0),
         last12Spend: monthly.reduce((a, m) => a + m.spend, 0) };
     });

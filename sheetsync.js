@@ -3,7 +3,7 @@
 const crypto = require('crypto');
 const FIELDS = { date: ['date'], mechanic: ['mechanic', 'tech', 'technician'], unit: ['vehicleunit', 'unit', 'vehicle', 'truck'], mileage: ['mileage', 'miles', 'odometer'],
   job: ['jobtype', 'type'], work: ['workperformed', 'work', 'description', 'repair'], parts: ['partsused', 'parts'], partsCost: ['partscost', 'partcost', 'cost'],
-  supplies: ['shopsupplies', 'supplies'], status: ['status'], notes: ['notes', 'note', 'comments'] };
+  supplies: ['shopsupplies', 'supplies'], laborHours: ['laborhours', 'laborhrs', 'labor', 'hours'], status: ['status'], notes: ['notes', 'note', 'comments'] };
 const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 function parseCSV(t) { const rows = []; let row = [], f = '', q = false; t = String(t).replace(/^\uFEFF/, '');
   for (let i = 0; i < t.length; i++) { const c = t[i];
@@ -36,7 +36,8 @@ async function run(db, opts, mode) {
     const get = (r, k) => { const i = col(k); return i >= 0 ? String(r[i] || '').trim() : ''; };
     const sent = new Set(S.sentRows), veh = new Map(db.vehicles.filter(v => !v.example).map(v => [norm(v.truck), v]));
     const keys = new Set(db.services.map(s => s.vehicleId + '|' + s.date + '|' + Math.round(Number(s.cost || 0) * 100)));
-    for (let i = 1; i < rows.length; i++) { const r = rows[i], n = i + 1, date = isoDate(get(r, 'date')), unit = get(r, 'unit');
+    for (let i = 1; i < rows.length; i++) { const r = rows[i], n = i + 1, date = isoDate(get(r, 'date')), unit = get(r, 'unit'), lh = parseFloat(get(r, 'laborHours').replace(/[^0-9.]/g, '')), lhv = isFinite(lh) && lh > 0 ? lh : null;
+      if (lhv != null) { const ex = db.services.find(s => s.sheetRow === n && s.laborHours == null); if (ex) { ex.laborHours = lhv; res.laborFilled = (res.laborFilled || 0) + 1; } } /*LABOR1 backfill hours on rows already synced*/
       if (sent.has(n) || !date || !unit) continue;
       if (mode === 'skip') { sent.add(n); res.already++; continue; }
       const v = veh.get(norm(unit)); if (!v) { res.unknown.push({ row: n, unit: unit.slice(0, 40) }); continue; }
@@ -44,7 +45,7 @@ async function run(db, opts, mode) {
       if (keys.has(v.id + '|' + date + '|' + Math.round(cost * 100)) || keys.has(v.id + '|' + date + '|' + Math.round(pc * 100))) { sent.add(n); res.already++; continue; }
       const job = get(r, 'job'), status = get(r, 'status'), notes = get(r, 'notes'), mil = parseInt(get(r, 'mileage').replace(/[^0-9]/g, ''), 10) || null;
       const rec = { id: crypto.randomUUID(), vehicleId: v.id, date, mileage: mil, cost, shop: get(r, 'mechanic').slice(0, 80), category: (get(r, 'work') || job || 'Shop work').slice(0, 200),
-        parts: get(r, 'parts').slice(0, 300), downtimeDays: null, notes: [job && job + '.', status && 'Status: ' + status + '.', notes, `[sheet row ${n}]`].filter(Boolean).join(' ').slice(0, 1000), sheetRow: n };
+        parts: get(r, 'parts').slice(0, 300), downtimeDays: null, notes: [job && job + '.', status && 'Status: ' + status + '.', notes, `[sheet row ${n}]`].filter(Boolean).join(' ').slice(0, 1000), sheetRow: n, laborHours: lhv };
       db.services.push(rec); opts.bumpMileage && opts.bumpMileage(db, rec); keys.add(v.id + '|' + date + '|' + Math.round(cost * 100)); sent.add(n); res.added++; }
     S.sentRows = [...sent].sort((a, b) => a - b); S.lastError = null; S.detected = map;
   } catch (e) { S.lastError = String(e.message || e).slice(0, 300); }
