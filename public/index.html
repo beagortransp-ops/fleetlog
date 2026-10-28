@@ -955,12 +955,35 @@ window.emailRec = async kind => { const el = document.getElementById(kind === 'v
   box.querySelector('#emTo').focus();
   box.querySelector('#emGo').onclick = async () => { const to = box.querySelector('#emTo').value.trim();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return msg('Enter a valid email address.', 1);
-    const sel = document.querySelector('#virT'), truck = kind === 'vir' && sel ? ' - ' + ((sel.options[sel.selectedIndex] || {}).text || '') : '';
-    const subject = 'FleetLog ' + name + truck, text = recText(el); msg('Sending...');
-    let r = null; if (window.DEMO) r = { mailto: true }; else try { r = await API.req('POST', 'email-record', { to, subject, text }); } catch (e) { r = { mailto: true }; }
-    if (r && r.ok) return msg('Sent to ' + to + '.');
-    const body = text.length > 1800 ? text.slice(0, 1800) + '\n...(record shortened; use Print / Save PDF for the full copy)' : text;
-    location.href = 'mailto:' + encodeURIComponent(to) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
-    msg('Opened your mail app with the record filled in. Press Send there.'); };
+    const vid = kind === 'vir' ? (window.VIRCUR || {}).vehicleId : (window.mmrTruck || ((el.closest('#app') || document).querySelector('select') || {}).value), vv = (db.vehicles || []).find(x => x.id === vid), truck = vv && vv.truck ? ' - ' + vv.truck : '';
+    const subject = 'FleetLog ' + name + truck, d = new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10), filename = ('FleetLog-' + (kind === 'vir' ? 'FL-BIT-1' : 'FL-MMR-1') + truck.replace(/[^\w]+/g, '-') + '-' + d + '.pdf').replace(/-+/g, '-');
+    const note = 'Attached: ' + name + truck + ' (PDF).';
+    const go = box.querySelector('#emGo'); go.disabled = true; msg('Making the PDF...');
+    let blob; try { blob = await recPdf(el); } catch (e) { go.disabled = false; return msg('Could not make the PDF. Use Print / Save PDF instead.', 1); }
+    let srv = false; if (!window.DEMO) try { srv = (await API.req('GET', 'email-record')).server; } catch (e) {}
+    if (srv) { msg('Sending...'); try { const b64 = await new Promise((ok, no) => { const fr = new FileReader(); fr.onload = () => ok(String(fr.result).split(',')[1]); fr.onerror = no; fr.readAsDataURL(blob); });
+      const r = await API.req('POST', 'email-record', { to, subject, text: note, pdf: b64, filename }); if (r && r.ok) { go.disabled = false; return msg('Sent to ' + to + ' with the PDF attached.'); } } catch (e) {} }
+    go.disabled = false; const file = new File([blob], filename, { type: 'application/pdf' });
+    const share = async () => { try { await navigator.share({ files: [file], title: subject, text: note + ' Send to: ' + to }); msg('Pick Mail and send it to ' + to + '. The PDF is attached.'); return true; } catch (e) { if (e && e.name === 'AbortError') { msg('Sharing cancelled.', 1); return true; } return false; } };
+    const touch = /iPhone|iPad|iPod|Android|Mobile/i.test(navigator.userAgent) || (navigator.maxTouchPoints || 0) > 0;
+    if (touch && navigator.canShare && navigator.canShare({ files: [file] })) {
+      if (await share()) return;
+      const sb = document.createElement('button'); sb.className = 'b'; sb.style.cssText = 'width:auto;margin-top:6px;background:#e8742a;border-color:#e8742a'; sb.textContent = 'Share PDF to Mail'; sb.onclick = async () => { if (await share()) sb.remove(); };
+      msg('PDF ready. Tap the button to pick Mail.'); box.appendChild(sb); return; }
+    const url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000);
+    setTimeout(() => { location.href = 'mailto:' + encodeURIComponent(to) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(note + '\n\nPlease attach the downloaded file ' + filename + ' before sending.'); }, 400);
+    msg('Downloaded ' + filename + ' and opened your mail app. Attach the PDF there, then press Send.'); };
 };
+</script><script>/*EMAILPDF1 PDF of the on-screen form (vendored html2canvas + jsPDF, loaded on demand)*/
+window.loadJs = src => new Promise((ok, no) => { if (document.querySelector('script[src="' + src + '"]')) return ok(); const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = no; document.head.appendChild(s); });
+window.recPdf = async el => { await loadJs('/vendor/html2canvas.min.js'); await loadJs('/vendor/jspdf.umd.min.js');
+  const W = 816; /*8.5in at 96px*/
+  const c = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false, windowWidth: Math.max(W, el.scrollWidth),
+    ignoreElements: n => n.tagName === 'BUTTON' || (n.classList && (n.classList.contains('sigc') || n.classList.contains('sigh'))),
+    onclone: (doc, ce) => { ce.style.boxShadow = 'none'; ce.style.maxWidth = 'none'; ce.style.width = ce.id === 'mmrForm' ? '720px' : Math.max(720, el.scrollWidth) + 'px'; ce.style.margin = '0'; const sig = ((db.profile || [])[0] || {}).sig; /*saved signature drawing, like Print all*/
+      if (ce.id === 'mmrForm' && sig) [...ce.querySelectorAll('div')].filter(d => d.textContent.trim() === 'Signature:' && d.nextElementSibling).forEach(d => { const box = d.nextElementSibling; if (!box.textContent.trim()) { box.innerHTML = '<img src="' + sig + '" style="height:30px;max-width:100%;object-fit:contain;display:block">'; box.style.height = 'auto'; } }); } });
+  const pdf = new jspdf.jsPDF({ unit: 'pt', format: 'letter', orientation: 'portrait', compress: true });
+  const pw = 612, ph = 792, m = 22, aw = pw - 2 * m, ah = ph - 2 * m; let w = aw, h = c.height * aw / c.width; if (h > ah) { w = w * ah / h; h = ah; }
+  pdf.addImage(c.toDataURL('image/jpeg', 0.9), 'JPEG', (pw - w) / 2, m, w, h);
+  return pdf.output('blob'); };
 </script></body></html>

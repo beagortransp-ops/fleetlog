@@ -440,14 +440,16 @@ http.createServer(async (req, res) => {
       const rows = db[c].map(r => r.vehicleId ? { truck: trucks[r.vehicleId], ...r } : r);
       res.writeHead(200, { 'Content-Type': 'text/csv', 'Content-Disposition': `attachment; filename="${c}.csv"` }); return res.end(L.toCSV(rows));
     }
-    if (a === 'email-record' && m === 'POST' && !b) { /*EMAILREC1 send a form by email; Resend if configured, else client uses mailto*/
-      const o = await body(req), to = String(o.to || '').trim().toLowerCase().slice(0, 200), subj = String(o.subject || 'FleetLog record').replace(/[\r\n]/g, ' ').slice(0, 200), text = String(o.text || '').slice(0, 20000);
+    if (a === 'email-record' && m === 'GET' && !b) return send(res, 200, { server: !!process.env.RESEND_API_KEY }); /*EMAILPDF1*/
+    if (a === 'email-record' && m === 'POST' && !b) { /*EMAILREC1 EMAILPDF1 send a form as a PDF attachment via Resend; without a key the device shares/downloads it*/
+      const o = await body(req), to = String(o.to || '').trim().toLowerCase().slice(0, 200), subj = String(o.subject || 'FleetLog record').replace(/[\r\n]/g, ' ').slice(0, 200), text = String(o.text || '').slice(0, 2000);
+      const pdf = String(o.pdf || '').replace(/^data:[^,]*,/, ''), fname = (String(o.filename || 'FleetLog-record.pdf').replace(/[^\w.\- ]/g, '').slice(0, 80) || 'FleetLog-record.pdf').replace(/(\.pdf)?$/i, '.pdf');
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return send(res, 400, { error: 'Enter a valid email.' });
-      if (!text.trim()) return send(res, 400, { error: 'Nothing to send.' });
+      if (!pdf || pdf.length > 14e6 || !/^[A-Za-z0-9+/=]+$/.test(pdf) || !Buffer.from(pdf.slice(0, 8), 'base64').toString('latin1').startsWith('%PDF')) return send(res, 400, { error: 'The PDF could not be created.' });
       if (!process.env.RESEND_API_KEY) return send(res, 200, { ok: false, mailto: true });
       try {
         const r = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: 'Bearer ' + process.env.RESEND_API_KEY, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ from: process.env.RECORD_FROM || process.env.CONTACT_FROM || 'FleetLog <onboarding@resend.dev>', to, reply_to: acct.email, subject: subj, text: text + '\n\n---\nSent from FleetLog by ' + acct.email }) });
+          body: JSON.stringify({ from: process.env.RECORD_FROM || process.env.CONTACT_FROM || 'FleetLog <onboarding@resend.dev>', to, reply_to: acct.email, subject: subj, text: (text || 'The record is attached as a PDF.') + '\n\n---\nSent from FleetLog by ' + acct.email, attachments: [{ filename: fname, content: pdf }] }) });
         if (!r.ok) { console.log('email-record: send failed', r.status); return send(res, 200, { ok: false, mailto: true }); }
         return send(res, 200, { ok: true });
       } catch (e) { console.log('email-record: send error'); return send(res, 200, { ok: false, mailto: true }); }
