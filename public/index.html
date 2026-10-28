@@ -239,8 +239,8 @@ document.addEventListener('input', e => { const el = e.target; if (!(el.name ===
 const exTag = r => r.example ? '<span class="ex">example</span>' : '';
 const vOpts = () => db.vehicles.map(v => `<option value="${v.id}">${esc(v.truck)}</option>`).join('');
 const isTire = p => !!p && /tire/i.test(String(p.type || '') + ' ' + String(p.position || '')) && !/pressure|tpms/i.test(String(p.type || '')); /*SVCMERGE*/
-const ICO = { home: IC('home'), fix: IC('edit'), reports: IC('camera'), dash: IC('chart'), vehicles: IC('truck'), assign: IC('route'), services: IC('wrench'), parts: IC('tire'), due: IC('clock'), mmr: IC('clipboard'), insp: IC('checklist'), vir: IC('receipt'), kb: IC('book'), quotes: IC('chat'), settings: IC('gear') };
-const TABS = { home: 'Home', dash: 'Dashboard', vehicles: 'Trucks', assign: 'Assignments', services: 'Service log', due: 'Upcoming', fix: 'Fix later', reports: 'Driver reports', insp: 'Inspections', mmr: 'Monthly record', vir: 'Inspection record', settings: 'Settings' };
+const ICO = { home: '🏠', fix: '🛠️', reports: '📸', dash: '📊', vehicles: '🚛', services: '🔧', parts: '🛞', due: '⏰', mmr: '📋', insp: '✅', vir: '🧾', kb: '📚', quotes: '💬', settings: '⚙️' } /*NAVEMOJI restored pre-aa7e77d color icons*/;
+const TABS = { home: 'Home', dash: 'Dashboard', vehicles: 'Trucks', /*NOASSIGN tab removed from nav*/ services: 'Service log', due: 'Upcoming', fix: 'Fix later', reports: 'Driver reports', insp: 'Inspections', mmr: 'Monthly record', vir: 'Inspection record', settings: 'Settings' };
 async function refresh() { db = await API.state(); render(); trialBanner(); }
 setTimeout(() => { const r0 = render; render = function () { if (tab === 'settings' && AUTH.role() === 'user') tab = 'home'; r0.apply(this, arguments); if (document.getElementById('teamCard')) teamLoad(); }; }, 0); /*TEAM1*/
 const drOpen = () => (db.driverReports || []).filter(r => r.status !== 'resolved').length; /*DRIVER1*/
