@@ -59,7 +59,7 @@ if (!PIN_HASH) console.warn('WARNING: PIN_HASH not set – API is open. Set it b
 const FAILS = new Map(), MAXF = 5, WIN = 15 * 60 * 1000; // wrong-PIN limit: 5 per 15 min per IP
 const ipOf = req => String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || '?';
 const safeEq = (a, b) => a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
-const COLS = ['vehicles', 'services', 'parts', 'quotes', 'intervals', 'mileageLog', 'profile', 'inspections', 'kbFixes', 'vir', 'driverReports']; /*VIRFORM*/ /*DRIVER1*/
+const COLS = ['vehicles', 'services', 'parts', 'quotes', 'intervals', 'mileageLog', 'profile', 'inspections', 'kbFixes', 'vir', 'driverReports', 'assignments']; /*VIRFORM*/ /*DRIVER1*/
 const DEFAULT_INTERVALS = [
   ['Oil change', 7500, 6], ['Tire rotation', 10000, 6], ['Tires', 50000, 48], ['Brakes', 40000, null],
   ['Battery', null, 48], ['Transmission fluid', 60000, null], ['Coolant', 100000, 60], ['Air filter', 20000, 12],
@@ -70,7 +70,7 @@ const DEFAULT_INTERVALS = [
 const DBS = new Map();
 function fileFor(user) { return user ? path.join(DATA_DIR, 'data-' + crypto.createHash('sha256').update(user).digest('hex').slice(0, 24) + '.json') : DATA; }
 /*TRIAL3 3-day free trial. Data is never deleted; after the trial, data routes return 402 until paid.*/
-const TRIAL_DAYS = Number(process.env.TRIAL_DAYS || 0), /*NOTRIAL pay before use*/ PAYMENT_URL = process.env.PAYMENT_URL || '', HELP_EMAIL = 'fleetlog.support@gmail.com';
+const TRIAL_DAYS = Number(process.env.TRIAL_DAYS || 0), /*NOTRIAL pay before use*/ PAYMENT_URL = process.env.PAYMENT_URL || '', HELP_EMAIL = String(process.env.SUPPORT_EMAIL || '').trim() /*SUPPORT1 one config value; empty = contact form only*/;
 const OWNER_PAID = /^(1|true|yes|on)$/i.test(String(process.env.OWNER_PAID || '').trim().replace(/^["']|["']$/g, '').trim()); // exempts the owner (no-user / default) account
 /*PLANS1 subscription plans – defined once, exposed via /api/billing as `plans`.*/
 const PLANS = [
@@ -117,15 +117,15 @@ function example(db) {
   db.vehicles.push(v1, v2);
   const S = (v, days, mileage, cost, shop, category, parts, notes, downtimeDays) => ({ id: id(), vehicleId: v.id, date: d(days), mileage, cost, shop, category, parts, notes, downtimeDays, ...ex });
   db.services.push(
-    S(v1, 300, 118000, 89, 'Quick Lube Tracy', 'Oil change', '', '', 0), S(v1, 150, 130500, 95, 'Quick Lube Tracy', 'Oil change', '', '', 0),
-    S(v1, 40, 139800, 1450, 'Valley Ford', 'Repair', 'Sliding door roller & cable', 'Door stuck on route', 2),
-    S(v2, 330, 178000, 2900, 'Central Valley Transmission', 'Transmission fluid', 'Fluid + valve body', '', 4),
-    S(v2, 120, 199000, 99, 'Quick Lube Tracy', 'Oil change', '', '', 0), S(v2, 20, 210500, 640, 'Valley Ford', 'Brakes', 'Front pads & rotors', '', 1));
+    S(v1, 300, 118000, 89, 'Corner Lube & Oil', 'Oil change', '', '', 0), S(v1, 150, 130500, 95, 'Corner Lube & Oil', 'Oil change', '', '', 0),
+    S(v1, 40, 139800, 1450, 'Northside Truck Repair', 'Repair', 'Sliding door roller & cable', 'Door stuck on route', 2),
+    S(v2, 330, 178000, 2900, 'Valley Transmission Co.', 'Transmission fluid', 'Fluid + valve body', '', 4),
+    S(v2, 120, 199000, 99, 'Corner Lube & Oil', 'Oil change', '', '', 0), S(v2, 20, 210500, 640, 'Northside Truck Repair', 'Brakes', 'Front pads & rotors', '', 1));
   const P = (v, days, mileage, type, position, brand, cost, notes) => ({ id: id(), vehicleId: v.id, date: d(days), mileage, type, position, brand, cost, notes, ...ex });
-  db.parts.push(P(v1, 200, 125000, 'Tires', 'All 4', 'Michelin Agilis', 1180, ''), P(v1, 90, 135000, 'Battery', '', 'Motorcraft', 260, 'No-start'),
+  db.parts.push(P(v1, 200, 125000, 'Tires', 'All 4', 'Commercial van tires', 1180, ''), P(v1, 90, 135000, 'Battery', '', 'OEM', 260, 'No-start'),
     P(v2, 60, 206000, 'Alternator', '', 'Reman', 520, 'Battery light on'), P(v2, 10, 211500, 'Starter', '', 'Reman', 410, ''));
   const Q = (v, job, shop, price, chosen) => ({ id: id(), vehicleId: v.id, job, shop, price, date: d(3), notes: '', chosen, ...ex });
-  db.quotes.push(Q(v1, 'Rear brakes', 'Valley Ford', 720, false), Q(v1, 'Rear brakes', 'Tracy Brake & Tire', 540, true), Q(v1, 'Rear brakes', 'Midas', 610, false));
+  db.quotes.push(Q(v1, 'Rear brakes', 'Northside Truck Repair', 720, false), Q(v1, 'Rear brakes', 'Eastside Brake & Tire', 540, true), Q(v1, 'Rear brakes', 'Main St. Auto Service', 610, false));
 }
 /*DEMO1 read-only public demo store (in memory, never saved, never a real user's data)*/
 let DEMO = null;
@@ -149,6 +149,10 @@ function bumpMileage(db, rec) {
 }
 /*CONTACT1 "Need help?" form -> Resend. Env: RESEND_API_KEY, CONTACT_FROM, CONTACT_TO. No key = 503 {fallback:true}.*/
 const CRATE = new Map(), CMAX = 5, CWIN = 60 * 60 * 1000;
+const CONTACT_TO = String(process.env.CONTACT_TO || process.env.SUPPORT_EMAIL || '').trim();
+const inboxSave = m => { const f = path.join(DATA_DIR, 'contact-inbox.json'); let a = []; try { a = JSON.parse(fs.readFileSync(f, 'utf8')); } catch {} a.push(m); fs.writeFileSync(f + '.tmp', JSON.stringify(a.slice(-500), null, 2)); fs.renameSync(f + '.tmp', f); console.log('contact: message stored in contact-inbox.json (set SUPPORT_EMAIL + RESEND_API_KEY to email it)'); };
+const escH = x => String(x).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const supportHtml = html => String(html).replace(/<!--SUPPORT_LINK-->/g, HELP_EMAIL ? `<a href="mailto:${escH(HELP_EMAIL)}">${escH(HELP_EMAIL)}</a>` : '<a href="/#help">our contact form</a>').replace(/<!--SUPPORT_CONTACT-->/g, '<a href="/#help">Contact</a>');
 async function contact(req, res) {
   if (req.method !== 'POST') return send(res, 405, { error: 'POST only' });
   let raw = ''; for await (const c of req) { raw += c; if (raw.length > 20000) return send(res, 413, { error: 'Message too long.' }); }
@@ -157,17 +161,17 @@ async function contact(req, res) {
   const name = String(d.name || '').trim().slice(0, 100), email = String(d.email || '').trim().slice(0, 200), msg = String(d.message || '').trim();
   if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !msg) return send(res, 400, { error: 'Please fill in name, a valid email and a message.' });
   if (msg.length > 5000) return send(res, 400, { error: 'Message too long (max 5000 characters).' });
-  if (!process.env.RESEND_API_KEY) return send(res, 503, { fallback: true, error: 'Email sending not set up.' });
-  const ip = ipOf(req), now = Date.now(), h = (CRATE.get(ip) || []).filter(t => now - t < CWIN);
+    const ip = ipOf(req), now = Date.now(), h = (CRATE.get(ip) || []).filter(t => now - t < CWIN);
   if (h.length >= CMAX) return send(res, 429, { error: 'Too many messages. Please try again later.' });
   h.push(now); CRATE.set(ip, h);
+  if (!process.env.RESEND_API_KEY || !CONTACT_TO) { inboxSave({ at: new Date().toISOString(), name, email, subject: d.subject === 'Cancel subscription' ? 'Cancel subscription' : 'FleetLog support', message: msg.slice(0, 5000) }); return send(res, 200, { ok: true, stored: true }); } /*SUPPORT1 no mail set up: keep the message on the server (contact-inbox.json)*/
   try {
     const r = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: 'Bearer ' + process.env.RESEND_API_KEY, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from: process.env.CONTACT_FROM || 'FleetLog <onboarding@resend.dev>', to: process.env.CONTACT_TO || 'fleetlog.support@gmail.com', reply_to: email,
+      body: JSON.stringify({ from: process.env.CONTACT_FROM || 'FleetLog <onboarding@resend.dev>', to: CONTACT_TO, reply_to: email,
         subject: (d.subject === 'Cancel subscription' ? 'Cancel subscription' : 'FleetLog support') + ': ' + name.replace(/[\r\n]/g, ' '), text: msg + '\n\n---\nFrom: ' + name + ' <' + email + '>' }) });
-    if (!r.ok) { console.error('contact: resend', r.status, (await r.text()).slice(0, 300)); return send(res, 502, { error: 'Could not send the message. Please email fleetlog.support@gmail.com.' }); }
+    if (!r.ok) { console.error('contact: resend', r.status, (await r.text()).slice(0, 300)); return send(res, 502, { error: 'Could not send the message. Please try again in a few minutes.' }); }
     return send(res, 200, { ok: true });
-  } catch (e) { console.error('contact:', e.message); return send(res, 502, { error: 'Could not send the message. Please email fleetlog.support@gmail.com.' }); }
+  } catch (e) { console.error('contact:', e.message); return send(res, 502, { error: 'Could not send the message. Please try again in a few minutes.' }); }
 }
 /*SHEETSYNC1 add-on gate + background sync every SHEETSYNC_MIN minutes*/
 const SHEETSYNC_PRICE = 9, SHEETSYNC_PAYMENT_URL = String(process.env.SHEETSYNC_PAYMENT_URL || '').trim(), SHEETSYNC_MIN = 10, SS_OPTS = { save: db => save(db), bumpMileage: (db, r) => bumpMileage(db, r) };
@@ -190,13 +194,33 @@ const bodyMax = (req, max) => new Promise((ok, no) => { let s = '', n = 0; req.o
 function driverLinkView(db) { return db.driverLink ? { token: db.driverLink.token, createdAt: db.driverLink.createdAt } : null; }
 function driverLinkNew(db, user) { if (db.driverLink) delete DLINKS[sha(db.driverLink.token)]; const token = crypto.randomBytes(18).toString('base64url'); db.driverLink = { token, createdAt: new Date().toISOString() }; DLINKS[sha(token)] = user; dlsave(); save(db); }
 function driverLinkOff(db) { if (db.driverLink) { delete DLINKS[sha(db.driverLink.token)]; dlsave(); } delete db.driverLink; save(db); }
+const u0 = req => new URL(req.url, 'http://x');
 async function driverRoute(req, res, token, action) {
   const key = DLINKS[sha(String(token || ''))];
   if (key == null) return send(res, 404, { error: 'This driver link is not valid. Ask your fleet manager for the current link.' });
   const db = getDb(key);
   if (!db.driverLink || !safeEq(sha(db.driverLink.token), sha(token))) return send(res, 404, { error: 'This driver link is not valid.' });
   if (!billing(db, key).active) return send(res, 402, { error: 'Reporting is paused for this fleet account.' });
-  if (action === 'trucks' && req.method === 'GET') return send(res, 200, { trucks: db.vehicles.filter(v => !v.example).map(v => ({ id: v.id, truck: v.truck, desc: [v.year, v.make, v.model].filter(Boolean).join(' ') })) });
+  if (action === 'trucks' && req.method === 'GET') { const td = String(u0(req).searchParams.get('date') || new Date().toISOString().slice(0, 10)).slice(0, 10);
+    return send(res, 200, { trucks: db.vehicles.filter(v => !v.example).map(v => { const L = lastInsp(db, v.id), def = L ? L.items.filter(x => x.result === 'fail').map(x => x.item + (x.note ? ' – ' + x.note : '')) : [];
+      return { id: v.id, truck: v.truck, desc: [v.year, v.make, v.model].filter(Boolean).join(' '), mileage: v.mileage || null, last: L ? { date: L.date, type: L.type, driver: L.driver, defects: def, signoff: L.signoff || null } : null }; }),
+      today: (db.assignments || []).filter(x => x.date === td && !x.example).map(x => ({ vehicleId: x.vehicleId, driver: x.driver || '', route: x.route || '' })) }); }
+  if (action === 'dvir' && req.method === 'POST') { /*DVIR1 driver pre-trip/post-trip from the driver link*/
+    const ip = ipOf(req);
+    if (!rateOk('ip|' + ip, 30, 3600e3) || !rateOk('acct|' + key, 200, 864e5)) return send(res, 429, { error: 'Too many reports. Please wait and try again.' });
+    let o; try { o = await bodyMax(req, 400e3); } catch (e) { return send(res, e.code === 413 ? 413 : 400, { error: e.code === 413 ? 'Signature is too large.' : 'Bad request' }); }
+    const v = db.vehicles.find(x => x.id === o.vehicleId && !x.example), driver = String(o.driver || '').trim().slice(0, 60);
+    if (!v) return send(res, 400, { error: 'Pick a truck.' });
+    if (!driver) return send(res, 400, { error: 'Enter your name.' });
+    const mt = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(String(o.sig || ''));
+    if (!mt) return send(res, 400, { error: 'Sign the report before sending.' });
+    const L = lastInsp(db, v.id), prevDef = L && L.items.some(x => x.result === 'fail');
+    if (prevDef && !o.reviewedPrev) return send(res, 400, { error: 'Review the last report for this truck and tick the box.' });
+    const rec = makeInspection(db, v, { ...o, type: /post/i.test(String(o.type)) ? 'Post-trip' : 'Pre-trip', date: new Date().toISOString().slice(0, 10), driver }, { source: 'driver-link', at: new Date().toISOString(), reviewedPrev: prevDef ? { id: L.id, signoff: L.signoff || null } : null });
+    if (!rec) return send(res, 400, { error: 'Check at least one item.' });
+    const buf = Buffer.from(mt[1], 'base64'); const dir = photoDir(key); fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(path.join(dir, rec.id + '-sig.png'), buf); rec.sig = rec.id + '-sig.png';
+    save(db); return send(res, 201, { ok: true, id: rec.id, defects: rec.fixIds.length });
+  }
   if (action === 'report' && req.method === 'POST') {
     const ip = ipOf(req);
     if (!rateOk('ip|' + ip, 30, 3600e3) || !rateOk('acct|' + key, 200, 864e5)) return send(res, 429, { error: 'Too many reports. Please wait and try again.' });
@@ -220,8 +244,25 @@ async function driverRoute(req, res, token, action) {
   }
   return send(res, 404, { error: 'no route' });
 }
+/*DVIR1 one inspection builder for the app and the driver link. Defects go to the service log (Fix later) and wait for a mechanic sign-off.*/
+function makeInspection(db, v, o, extra) {
+  const OK = ['pass', 'fail', 'note'], date = String(o.date || new Date().toISOString().slice(0, 10)).slice(0, 10);
+  const items = (Array.isArray(o.items) ? o.items : []).slice(0, 40).map(x => ({ item: String(x.item || '').slice(0, 80), result: OK.includes(x.result) ? x.result : 'pass', note: String(x.note || '').slice(0, 300) })).filter(x => x.item);
+  if (!items.length) return null;
+  const mileage = o.mileage === '' || o.mileage == null ? null : (Number(String(o.mileage).replace(/[^0-9.]/g, '')) || null);
+  const type = String(o.type || 'Pre-trip').slice(0, 20);
+  const rec = { id: crypto.randomUUID(), vehicleId: v.id, date, driver: String(o.driver || '').trim().slice(0, 80), mileage, type, items, fixIds: [], ...(extra || {}) };
+  rec.result = items.some(x => x.result === 'fail') ? 'fail' : items.some(x => x.result === 'note') ? 'note' : 'pass';
+  for (const x of items.filter(x => x.result === 'fail')) {
+    const fx = { id: crypto.randomUUID(), vehicleId: v.id, date, mileage, cost: null, shop: '', category: 'Pre-trip/post-trip (DVIR) repair', parts: '', notes: 'Inspection: ' + x.item + (x.note ? ' – ' + x.note : ''), downtimeDays: 0, needsDetails: true, inspectionId: rec.id };
+    db.services.push(fx); rec.fixIds.push(fx.id);
+  }
+  db.inspections.push(rec); bumpMileage(db, rec); return rec;
+}
+const lastInsp = (db, vid) => db.inspections.filter(r => r.vehicleId === vid && !r.example).sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(b.at || '').localeCompare(String(a.at || '')))[0] || null;
 /*TEAM1 team members: a member account (memberOf = owner's store key) opens the owner's store with role admin|user. Invites live in users.json.*/
-const roleOf = u => !u ? null : u.memberOf != null ? (u.role === 'admin' ? 'admin' : 'user') : 'owner';
+const roleOf = u => !u ? null : u.memberOf != null ? (u.role === 'admin' ? 'admin' : u.role === 'driver' ? 'driver' : 'user') : 'owner';
+const ROLE = r => r === 'admin' ? 'admin' : r === 'driver' ? 'driver' : 'user'; /*DRIVERROLE1*/
 const storeOwner = key => UDB.users.find(x => x.memberOf == null && baseKey(x) === key) || null;
 const killSessions = uid => { for (const [k, s] of Object.entries(UDB.sessions)) if (s.uid === uid) delete UDB.sessions[k]; };
 const INV_DAYS = 7;
@@ -234,7 +275,7 @@ function teamRoute(req, res, acct, key, b, c) {
       members: UDB.users.filter(x => x.memberOf === key).map(x => ({ id: x.id, email: x.email, role: roleOf(x), joinedAt: x.joinedAt || x.createdAt })),
       invites: UDB.invites.filter(i => i.key === key).map(invView) });
     if (b === 'invite' && m === 'POST' && !c) {
-      const o = await body(req), email = String(o.email || '').trim().toLowerCase().slice(0, 200), role = o.role === 'admin' ? 'admin' : 'user';
+      const o = await body(req), email = String(o.email || '').trim().toLowerCase().slice(0, 200), role = ROLE(o.role);
       if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return send(res, 400, { error: 'Enter a valid email or leave it empty.' });
       if (UDB.invites.filter(i => i.key === key).length >= 50) return send(res, 429, { error: 'Too many pending invites. Revoke some first.' });
       const i = { id: crypto.randomUUID(), token: crypto.randomBytes(24).toString('base64url'), key, email, role, createdBy: acct.id, createdAt: new Date().toISOString(), exp: Date.now() + INV_DAYS * 864e5 };
@@ -243,7 +284,7 @@ function teamRoute(req, res, acct, key, b, c) {
     if (b === 'invite' && m === 'DELETE' && c) { const n = UDB.invites.length; UDB.invites = UDB.invites.filter(i => !(i.id === c && i.key === key)); usave(); return send(res, n === UDB.invites.length ? 404 : 200, { ok: n !== UDB.invites.length }); }
     const t = b && UDB.users.find(x => x.id === b && x.memberOf === key);
     if (b && !t) return send(res, own && b === own.id ? 403 : 404, { error: own && b === own.id ? 'The account owner cannot be changed or removed.' : 'Member not found' });
-    if (t && m === 'PUT') { const o = await body(req); t.role = o.role === 'admin' ? 'admin' : 'user'; if (t.id !== acct.id) killSessions(t.id); usave(); return send(res, 200, { ok: true, role: t.role }); }
+    if (t && m === 'PUT') { const o = await body(req); t.role = ROLE(o.role); if (t.id !== acct.id) killSessions(t.id); usave(); return send(res, 200, { ok: true, role: t.role }); }
     if (t && m === 'DELETE') { delete t.memberOf; delete t.role; delete t.joinedAt; killSessions(t.id); usave(); return send(res, 200, { ok: true }); }
     return send(res, 404, { error: 'no team route' });
   })();
@@ -287,8 +328,10 @@ http.createServer(async (req, res) => {
       const f = path.join(PUB, u.pathname === '/' ? 'index.html' : ({ '/terms': 'terms.html', '/privacy': 'privacy.html', '/refund': 'refund.html', '/refunds': 'refund.html' })[u.pathname.replace(/\/+$/, '')] /*LEGAL1 public legal pages*/ || path.normalize(u.pathname).replace(/^\/+/, ''));
       if (!f.startsWith(PUB) || !fs.existsSync(f)) return send(res, 404, 'Not found', 'text/plain');
       if (/\.(html|js)$/.test(f)) res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate'); /*TAX875 no stale page*/
+      if (/(terms|privacy|refund)\.html$/.test(f)) return send(res, 200, supportHtml(fs.readFileSync(f, 'utf8')), 'text/html'); /*SUPPORT1*/
       return send(res, 200, fs.readFileSync(f), { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' }[path.extname(f)] || 'application/octet-stream');
     }
+    if (u.pathname === '/api/support') return send(res, 200, { email: HELP_EMAIL }); /*SUPPORT1*/
     if (u.pathname === '/api/contact') return contact(req, res); /*CONTACT1 public: before PIN/paywall*/
     if (PIN_HASH) {
       const ip = ipOf(req), now = Date.now(), f = (FAILS.get(ip) || []).filter(t => now - t < WIN);
@@ -319,6 +362,10 @@ http.createServer(async (req, res) => {
     const user = storeKey(acct), db = getDb(user);
     { const rl = roleOf(acct); /*TEAM1 server-side role checks*/
       if (rl === 'user' && (USER_BLOCK.includes(a) || (USER_RO.includes(a) && m !== 'GET') || (a === 'kb' && p[2] === 'refresh'))) return send(res, 403, { error: 'Your role (User) cannot do this. Ask the account owner or an admin.', role: rl });
+      if (rl === 'driver') { /*DRIVERROLE1 drivers: read trucks/assignments, run inspections, quick-log problems. Nothing else.*/
+        const okD = (m === 'GET' && (a === 'state' || a === 'billing' || a === 'sig' || COLS.includes(a))) || (m === 'POST' && (a === 'inspections' || a === 'services') && !b);
+        if (!okD) return send(res, 403, { error: 'Drivers can run inspections and log problems. Ask the account owner or an admin for anything else.', role: rl });
+        if (a === 'state') { const bl0 = billing(db, user); if (!bl0.active) return send(res, 402, { error: 'trial_ended' }); const o = { ...db }; delete o.driverLink; delete o.sheetSync; delete o.billing; delete o.consents; delete o.quotes; return send(res, 200, o); } }
       if (a === 'team') return teamRoute(req, res, acct, user, b, p[3]);
       if (rl === 'user' && a === 'state' && m === 'GET') { const bl0 = billing(db, user); if (!bl0.active) return send(res, 402, { error: 'trial_ended' }); const o = { ...db }; delete o.driverLink; delete o.sheetSync; delete o.billing; delete o.consents; return send(res, 200, o); } }
     if (OWNER_EMAIL && acct && String(acct.email || '').toLowerCase() === OWNER_EMAIL) OWNER_KEYS.add(user);
@@ -393,21 +440,36 @@ http.createServer(async (req, res) => {
       const rows = db[c].map(r => r.vehicleId ? { truck: trucks[r.vehicleId], ...r } : r);
       res.writeHead(200, { 'Content-Type': 'text/csv', 'Content-Disposition': `attachment; filename="${c}.csv"` }); return res.end(L.toCSV(rows));
     }
-    if (a === 'inspections' && m === 'POST' && !b) { /*INSPECT1*/
+    if (a === 'email-record' && m === 'POST' && !b) { /*EMAILREC1 send a form by email; Resend if configured, else client uses mailto*/
+      const o = await body(req), to = String(o.to || '').trim().toLowerCase().slice(0, 200), subj = String(o.subject || 'FleetLog record').replace(/[\r\n]/g, ' ').slice(0, 200), text = String(o.text || '').slice(0, 20000);
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return send(res, 400, { error: 'Enter a valid email.' });
+      if (!text.trim()) return send(res, 400, { error: 'Nothing to send.' });
+      if (!process.env.RESEND_API_KEY) return send(res, 200, { ok: false, mailto: true });
+      try {
+        const r = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: 'Bearer ' + process.env.RESEND_API_KEY, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ from: process.env.RECORD_FROM || process.env.CONTACT_FROM || 'FleetLog <onboarding@resend.dev>', to, reply_to: acct.email, subject: subj, text: text + '\n\n---\nSent from FleetLog by ' + acct.email }) });
+        if (!r.ok) { console.log('email-record: send failed', r.status); return send(res, 200, { ok: false, mailto: true }); }
+        return send(res, 200, { ok: true });
+      } catch (e) { console.log('email-record: send error'); return send(res, 200, { ok: false, mailto: true }); }
+    }
+    if (a === 'inspections' && m === 'POST' && !b) { /*INSPECT1 DVIR1*/
       const o = await body(req), v = db.vehicles.find(v => v.id === o.vehicleId);
       if (!v) return send(res, 400, { error: 'vehicleId required' });
-      const OK = ['pass', 'fail', 'note'], date = String(o.date || new Date().toISOString().slice(0, 10)).slice(0, 10);
-      const items = (Array.isArray(o.items) ? o.items : []).slice(0, 40).map(x => ({ item: String(x.item || '').slice(0, 80), result: OK.includes(x.result) ? x.result : 'pass', note: String(x.note || '').slice(0, 300) })).filter(x => x.item);
-      if (!items.length) return send(res, 400, { error: 'items required' });
-      const mileage = o.mileage === '' || o.mileage == null ? null : (Number(String(o.mileage).replace(/[^0-9.]/g, '')) || null);
-      const rec = { id: crypto.randomUUID(), vehicleId: v.id, date, driver: String(o.driver || '').trim().slice(0, 80), mileage, type: String(o.type || 'Pre-trip').slice(0, 20), items, fixIds: [] };
-      rec.result = items.some(x => x.result === 'fail') ? 'fail' : items.some(x => x.result === 'note') ? 'note' : 'pass';
-      for (const x of items.filter(x => x.result === 'fail')) {
-        const fx = { id: crypto.randomUUID(), vehicleId: v.id, date, mileage, cost: null, shop: '', category: 'Pre-trip/post-trip (DVIR) repair', parts: '', notes: 'Inspection: ' + x.item + (x.note ? ' – ' + x.note : ''), downtimeDays: 0, needsDetails: true, inspectionId: rec.id };
-        db.services.push(fx); rec.fixIds.push(fx.id);
-      }
-      db.inspections.push(rec); bumpMileage(db, rec); save(db); return send(res, 201, rec);
+      const rec = makeInspection(db, v, o, { at: new Date().toISOString(), by: acct.email });
+      if (!rec) return send(res, 400, { error: 'items required' });
+      save(db); return send(res, 201, rec);
     }
+    if (a === 'inspections' && b && p[3] === 'signoff' && m === 'POST') { /*DVIR1 mechanic sign-off closes the defect loop*/
+      if (roleOf(acct) === 'driver') return send(res, 403, { error: 'A mechanic, owner or admin signs off repairs.' });
+      const r = db.inspections.find(x => x.id === b); if (!r) return send(res, 404, { error: 'not found' });
+      const o = await body(req), by = String(o.by || '').trim().slice(0, 80), action = o.action === 'not_needed' ? 'not_needed' : 'corrected';
+      if (!by) return send(res, 400, { error: 'Enter the mechanic name.' });
+      r.signoff = { by, action, date: String(o.date || new Date().toISOString().slice(0, 10)).slice(0, 10), note: String(o.note || '').slice(0, 300), at: new Date().toISOString(), user: acct.email };
+      save(db); return send(res, 200, r);
+    }
+    if (a === 'sig' && m === 'GET') { const id = String(b || '').replace(/[^a-f0-9-]/g, ''), r = db.inspections.find(x => x.id === id && x.sig);
+      if (!r) return send(res, 404, { error: 'not found' }); const f = path.join(photoDir(user), r.sig); if (!fs.existsSync(f)) return send(res, 404, { error: 'not found' });
+      res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'private, max-age=86400' }); return res.end(fs.readFileSync(f)); }
     if (a === 'kb') { /*KBASE1 FleetLog knowledge base: NHTSA public data + OBDex CC0 codes + shop's own notes. No ALLDATA/Ford content.*/
       const K = KB.load(), c = p[2], q = String(u.searchParams.get('q') || '').trim();
       if (!c && m === 'GET') return send(res, 200, KB.overview(db, K));
