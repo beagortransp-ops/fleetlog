@@ -62,8 +62,14 @@
       return { vehicleId: v.id, truck: v.truck, monthly,
         totalSpend: mine.reduce((a, c) => a + (typeof LABOR_TOT === 'function' && c.kind === 'service' ? LABOR_TOT(c) : num(c.cost)), 0),
         downtimeDays: db.services.filter(s => s.vehicleId === v.id).reduce((a, s) => a + num(s.downtimeDays), 0),
-        last12Spend: monthly.reduce((a, m) => a + m.spend, 0) };
+        last12Spend: monthly.reduce((a, m) => a + m.spend, 0), ...cpm(v, mine) };
     });
+    /*CPM1 cost per mile = total recorded spend / miles between the lowest and highest odometer we have for the truck (needs 100+ miles)*/
+    function cpm(v, mine) {
+      const od = [v.mileage, v.startMileage, ...[db.services, db.parts, db.inspections || [], db.mileageLog || []].flatMap(a => (a || []).filter(x => x.vehicleId === v.id).map(x => x.mileage))].map(Number).filter(x => x > 0);
+      const miles = od.length > 1 ? Math.max(...od) - Math.min(...od) : 0, spend = mine.reduce((a, c) => a + (typeof LABOR_TOT === 'function' && c.kind === 'service' ? LABOR_TOT(c) : num(c.cost)), 0);
+      return { milesTracked: miles, costPerMile: miles >= 100 ? Math.round(spend / miles * 1000) / 1000 : null };
+    }
     const preds = predictions(db, today);
     return { months, perTruck,
       totals: { vehicles: db.vehicles.length, spend: perTruck.reduce((a, p) => a + p.totalSpend, 0),

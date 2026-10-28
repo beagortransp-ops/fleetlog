@@ -1,24 +1,82 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Report a truck problem</title>
-<style>*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,sans-serif;background:#f3f4f9;color:#1d1f3a}header{background:linear-gradient(135deg,#4d148c,#2a0a52);color:#fff;padding:18px 16px}header h1{margin:0;font-size:21px}header p{margin:4px 0 0;opacity:.85;font-size:14px}
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Driver inspection and problem report</title>
+<style>*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,sans-serif;background:#f3f4f9;color:#1d1f3a}header{background:linear-gradient(135deg,#5b2a86,#33184d);color:#fff;padding:18px 16px}header h1{margin:0;font-size:21px}header p{margin:4px 0 0;opacity:.85;font-size:14px}
 main{max-width:520px;margin:0 auto;padding:14px}label{display:block;font-weight:700;font-size:15px;margin:14px 0 6px}input,select,textarea{width:100%;font-size:17px;padding:13px;border:1.5px solid #cfd2e3;border-radius:12px;background:#fff;font-family:inherit}textarea{min-height:96px}
-.ph{display:flex;gap:10px}.ph button{flex:1}button{font-size:17px;font-weight:700;border:0;border-radius:12px;padding:15px;cursor:pointer}.sec{background:#fff;color:#4d148c;border:1.5px solid #4d148c}.go{width:100%;background:#ff6200;color:#fff;margin-top:20px;font-size:19px;padding:17px}.go:disabled{opacity:.6}
+.ph{display:flex;gap:10px}.ph button{flex:1}button{font-size:17px;font-weight:700;border:0;border-radius:12px;padding:15px;cursor:pointer}.sec{background:#fff;color:#5b2a86;border:1.5px solid #5b2a86}.go{width:100%;background:#e8742a;color:#fff;margin-top:20px;font-size:19px;padding:17px}.go:disabled{opacity:.6}
 #prev{display:none;margin-top:10px;position:relative}#prev img{width:100%;border-radius:12px;max-height:320px;object-fit:cover}#prev button{position:absolute;top:8px;right:8px;background:#000a;color:#fff;padding:6px 11px;font-size:14px}
-.chk{display:flex;gap:10px;align-items:center;font-weight:500;font-size:15px;margin-top:14px}.chk input{width:22px;height:22px}.msg{padding:12px;border-radius:10px;margin-top:12px;font-size:15px}.err{background:#fdecec;color:#a11}.ok{background:#e8f5e9;color:#1b5e20;text-align:center;padding:26px 14px}.ok b{display:block;font-size:22px;margin-bottom:6px}.hint{font-size:12px;color:#667;margin-top:4px}</style></head>
-<body><header><h1>Report a truck problem</h1><p>Send a photo and a short note to the shop.</p></header><main id="m"><p>Loading…</p></main>
+.chk{display:flex;gap:10px;align-items:center;font-weight:500;font-size:15px;margin-top:14px}.chk input{width:22px;height:22px}.msg{padding:12px;border-radius:10px;margin-top:12px;font-size:15px}.err{background:#fdecec;color:#a11}.ok{background:#e8f5e9;color:#1b5e20;text-align:center;padding:26px 14px}.ok b{display:block;font-size:22px;margin-bottom:6px}.hint{font-size:12px;color:#667;margin-top:4px}
+.tabs{display:flex;gap:8px;margin-bottom:6px}.tabs button{flex:1;background:#fff;color:#5b2a86;border:1.5px solid #5b2a86;font-size:15px;padding:12px}.tabs button.on{background:#5b2a86;color:#fff}
+.it{background:#fff;border:1px solid #dfe1ec;border-radius:12px;padding:10px 12px;margin-top:8px}.it b{display:block}.it small{color:#667}.rb{display:flex;gap:6px;margin-top:8px}.rb button{flex:1;padding:10px;font-size:15px;background:#f3f4f9;color:#1d1f3a;border:1.5px solid #cfd2e3}.rb button.pass{background:#2e7d32;color:#fff;border-color:#2e7d32}.rb button.fail{background:#c62828;color:#fff;border-color:#c62828}.it textarea{min-height:56px;margin-top:8px;font-size:15px;padding:9px}
+.prevr{background:#fff7ec;border:1px solid #f0c48a;border-radius:12px;padding:10px 12px;margin-top:12px;font-size:14px}.prevr.okp{background:#eef7ee;border-color:#a7d3a9}
+#sigc{width:100%;height:150px;background:#fff;border:1.5px dashed #9aa0bd;border-radius:12px;touch-action:none;display:block}.sigrow{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:#667;margin-top:4px}.sigrow button{padding:6px 12px;font-size:13px;background:#eee;color:#333}
+svg{vertical-align:-3px}</style></head>
+<body><header><h1 id="ht">Driver</h1><p id="hp">Inspect your truck before and after each trip, or report a problem.</p></header><main id="m"><p>Loading…</p></main>
+<script src="/ux.js?v=20261025b"></script>
 <script>
 const T = location.pathname.split('/')[2] || '', $ = s => document.querySelector(s), esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 let photo = null, trucks = [];
 async function load() {
   const r = await fetch('/api/driver/' + encodeURIComponent(T) + '/trucks'); const j = await r.json().catch(() => ({}));
   if (!r.ok) { $('#m').innerHTML = `<div class="msg err">${esc(j.error || 'This link is not working.')}</div>`; return; }
-  trucks = j.trucks; form();
+  trucks = j.trucks; today = j.today || []; dvir();
+}
+/*DVIR1 pre-trip / post-trip with signature; shows the last report and its mechanic sign-off*/
+const ITEMS = [['Tires', 'Tread, pressure, damage'], ['Brakes', 'Pedal feel, parking brake, air/lines'], ['Lights/signals', 'Head, tail, brake, turn, markers'], ['Horn', 'Works'], ['Mirrors & windshield', 'Clean, no cracks, adjusted'], ['Wipers', 'Blades and washer fluid'], ['Fluid leaks', 'Oil, coolant, fuel under truck'], ['Steering', 'No extra play, no pulling'], ['Dash lights', 'No warning lights on dash'], ['Emergency kit', 'Triangles, extinguisher, first aid'], ['Body/doors', 'Damage, doors, steps']];
+let today = [], res = {}, sigInk = false;
+const tabs = on => `<div class="tabs"><button type="button" class="${on === 'd' ? 'on' : ''}" onclick="dvir()">${IC('checklist',16)} Inspection</button><button type="button" class="${on === 'r' ? 'on' : ''}" onclick="form()">${IC('camera',16)} Report a problem</button></div>`;
+function myTruck() { const n = (localStorage.getItem('dlName') || '').toLowerCase(), a = today.find(x => n && x.driver.toLowerCase() === n); return a ? a.vehicleId : localStorage.getItem('dlTruck') || ''; }
+function dvir() {
+  $('#ht').textContent = 'Driver inspection (DVIR)'; res = {}; sigInk = false;
+  const vid = myTruck(), asg = today.find(x => x.vehicleId === vid);
+  $('#m').innerHTML = tabs('d') + `<form id="dv" autocomplete="off"><label>Your name</label><input name="driver" required maxlength="60" value="${esc(localStorage.getItem('dlName') || '')}" placeholder="First and last name" onchange="localStorage.setItem('dlName',this.value.trim());dvir()">
+  <label>Truck</label><select name="vehicleId" required onchange="localStorage.setItem('dlTruck',this.value);showPrev()"><option value="">Pick a truck…</option>${trucks.map(t => `<option value="${t.id}" ${t.id === vid ? 'selected' : ''}>${esc(t.truck)}${t.desc ? ' · ' + esc(t.desc) : ''}</option>`).join('')}</select>
+  ${asg ? `<div class="hint">${IC('route',14)} Assigned today${asg.route ? ': ' + esc(asg.route) : ''}</div>` : ''}
+  <label>Inspection</label><select name="type"><option>Pre-trip</option><option ${new Date().getHours() >= 13 ? 'selected' : ''}>Post-trip</option></select>
+  <label>Odometer (miles)</label><input name="mileage" inputmode="numeric" maxlength="9" placeholder="Optional">
+  <div id="prevr"></div>
+  <label>Check each item</label><div id="items">${ITEMS.map(([k, h], i) => `<div class="it"><b>${esc(k)}</b><small>${esc(h)}</small><div class="rb"><button type="button" data-i="${i}" data-r="pass" onclick="mark(${i},'pass')">${IC('check',16)} OK</button><button type="button" data-i="${i}" data-r="fail" onclick="mark(${i},'fail')">${IC('alert',16)} Defect</button></div><textarea id="n${i}" maxlength="300" placeholder="Describe the defect" hidden></textarea></div>`).join('')}</div>
+  <button type="button" class="sec" style="width:100%;margin-top:10px;font-size:15px;padding:11px" onclick="ITEMS.forEach((x,i)=>res[i]||mark(i,'pass'))">Mark the rest OK</button>
+  <label>Signature</label><canvas id="sigc"></canvas><div class="sigrow"><span>I inspected this truck and the report is correct.</span><button type="button" onclick="sigClear()">Clear</button></div>
+  <div id="e"></div><button class="go" id="sb">Sign and send</button></form>`;
+  sigInit(); showPrev(); $('#dv').onsubmit = sendDvir;
+}
+function mark(i, r) { res[i] = r; document.querySelectorAll(`[data-i="${i}"]`).forEach(b => b.className = b.dataset.r === r ? r : ''); const n = $('#n' + i); n.hidden = r !== 'fail'; if (r === 'fail') n.focus(); }
+function showPrev() {
+  const t = trucks.find(x => x.id === $('#dv').vehicleId.value), el = $('#prevr'); if (!t || !t.last) { el.innerHTML = ''; return; }
+  const L = t.last, so = L.signoff;
+  if (!L.defects.length) { el.innerHTML = `<div class="prevr okp">Last report: ${esc(L.type || 'Inspection')} ${fmtD(L.date)}${L.driver ? ' by ' + esc(L.driver) : ''} – no defects.</div>`; return; }
+  el.innerHTML = `<div class="prevr${so ? ' okp' : ''}"><b>Last report: ${esc(L.type || 'Inspection')} ${fmtD(L.date)}${L.driver ? ' by ' + esc(L.driver) : ''}</b>Defects: ${L.defects.map(esc).join('; ')}<br>${so ? `${IC('sign',14)} Signed off by ${esc(so.by)} on ${fmtD(so.date)}: ${so.action === 'not_needed' ? 'repair not needed for safe operation' : 'defects corrected'}.` : `${IC('alert',14)} Not signed off by a mechanic yet. Tell the shop before you drive.`}
+  <label class="chk"><input type="checkbox" name="reviewedPrev"> I reviewed the last report</label></div>`;
+}
+function sigInit() {
+  const c = $('#sigc'), r = c.getBoundingClientRect(), k = devicePixelRatio || 1; c.width = r.width * k; c.height = r.height * k; const x = c.getContext('2d'); x.scale(k, k); x.lineWidth = 2.2; x.lineCap = 'round'; x.strokeStyle = '#1d1f3a';
+  let on = false; const p = e => { const b = c.getBoundingClientRect(); return [e.clientX - b.left, e.clientY - b.top]; };
+  c.onpointerdown = e => { on = true; c.setPointerCapture(e.pointerId); x.beginPath(); x.moveTo(...p(e)); };
+  c.onpointermove = e => { if (!on) return; x.lineTo(...p(e)); x.stroke(); sigInk = true; };
+  c.onpointerup = c.onpointercancel = () => on = false;
+}
+function sigClear() { const c = $('#sigc'); c.getContext('2d').clearRect(0, 0, c.width, c.height); sigInk = false; }
+function sigData() { const c = $('#sigc'), s = Math.min(1, 600 / c.width), o = document.createElement('canvas'); o.width = c.width * s; o.height = c.height * s; o.getContext('2d').drawImage(c, 0, 0, o.width, o.height); return o.toDataURL('image/png'); }
+async function sendDvir(e) {
+  e.preventDefault(); const f = e.target, o = { driver: f.driver.value.trim(), vehicleId: f.vehicleId.value, type: f.type.value, mileage: f.mileage.value.trim(), reviewedPrev: !!(f.reviewedPrev && f.reviewedPrev.checked) };
+  if (!o.driver) return err('Enter your name.'); if (!o.vehicleId) return err('Pick a truck.');
+  const miss = ITEMS.filter((x, i) => !res[i]); if (miss.length) return err('Check every item. Not checked: ' + miss.map(x => x[0]).join(', ') + '.');
+  if (f.reviewedPrev && !f.reviewedPrev.checked) return err('Review the last report for this truck and tick the box.');
+  if (!sigInk) return err('Sign in the box before sending.');
+  o.items = ITEMS.map(([k], i) => ({ item: k, result: res[i], note: res[i] === 'fail' ? $('#n' + i).value.trim() : '' })); o.sig = sigData();
+  localStorage.setItem('dlName', o.driver); localStorage.setItem('dlTruck', o.vehicleId);
+  const b = $('#sb'); b.disabled = true; b.textContent = 'Sending…';
+  try { const r = await fetch('/api/driver/' + encodeURIComponent(T) + '/dvir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(o) }); const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || 'Could not send. Try again.');
+    $('#m').innerHTML = `<div class="msg ok"><b>${IC('check',22)} ${esc(o.type)} inspection sent</b>${j.defects ? j.defects + ' defect(s) sent to the shop for repair. Do not drive the truck if a defect makes it unsafe.' : 'No defects. Drive safe.'}</div><button class="go" onclick="load()">Done</button>`;
+  } catch (x) { err(x.message); b.disabled = false; b.textContent = 'Sign and send'; }
 }
 function form() {
+  $('#ht').textContent = 'Report a truck problem';
   const last = localStorage.getItem('dlTruck') || '';
-  $('#m').innerHTML = `<form id="f" autocomplete="off"><label>Your name</label><input name="driver" required maxlength="60" value="${esc(localStorage.getItem('dlName') || '')}" placeholder="First and last name">
+  $('#m').innerHTML = tabs('r') + `<form id="f" autocomplete="off"><label>Your name</label><input name="driver" required maxlength="60" value="${esc(localStorage.getItem('dlName') || '')}" placeholder="First and last name">
   <label>Truck</label><select name="vehicleId" required><option value="">Pick a truck…</option>${trucks.map(t => `<option value="${t.id}" ${t.id === last ? 'selected' : ''}>${esc(t.truck)}${t.desc ? ' · ' + esc(t.desc) : ''}</option>`).join('')}</select>
-  <label>Photo</label><div class="ph"><button type="button" class="sec" onclick="$('#cam').click()">📷 Take photo</button><button type="button" class="sec" onclick="$('#gal').click()">🖼️ Choose</button></div>
-  <input id="cam" type="file" accept="image/*" capture="environment" hidden><input id="gal" type="file" accept="image/*" hidden><div id="prev"><img alt="Photo preview"><button type="button" onclick="clearPhoto()">✕ Remove</button></div>
+  <label>Photo</label><div class="ph"><button type="button" class="sec" onclick="$('#cam').click()">${IC('camera',18)} Take photo</button><button type="button" class="sec" onclick="$('#gal').click()">${IC('image',18)} Choose</button></div>
+  <input id="cam" type="file" accept="image/*" capture="environment" hidden><input id="gal" type="file" accept="image/*" hidden><div id="prev"><img alt="Photo preview"><button type="button" onclick="clearPhoto()">${IC('x',14)} Remove</button></div>
   <label>What's wrong?</label><textarea name="description" maxlength="1000" placeholder="Example: Left rear tire low, air leak near the valve"></textarea>
   <label class="chk"><input type="checkbox" name="geo" checked> Share my location with this report</label><div class="hint">Only used to show where the truck is. You can turn this off.</div>
   <div id="e"></div><button class="go" id="sb">Send report</button></form>`;
@@ -45,7 +103,7 @@ async function submit(e) {
   if (f.geo.checked) { const c = await geo(); if (c) Object.assign(o, { lat: c.latitude, lng: c.longitude, accuracy: c.accuracy }); }
   try { const r = await fetch('/api/driver/' + encodeURIComponent(T) + '/report', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(o) }); const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(j.error || 'Could not send. Try again.');
-    photo = null; $('#m').innerHTML = `<div class="msg ok"><b>✓ Report sent</b>Thank you. The shop has your report.</div><button class="go" onclick="form()">Report another problem</button>`;
+    photo = null; $('#m').innerHTML = `<div class="msg ok"><b>${IC('check',22)} Report sent</b>Thank you. The shop has your report.</div><button class="go" onclick="form()">Report another problem</button>`;
   } catch (x) { err(x.message); b.disabled = false; b.textContent = 'Send report'; }
 }
 load();
