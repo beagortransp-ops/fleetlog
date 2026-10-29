@@ -38,6 +38,7 @@ async function run(db, opts, mode) {
     const keys = new Set(db.services.map(s => s.vehicleId + '|' + s.date + '|' + Math.round(Number(s.cost || 0) * 100)));
     for (let i = 1; i < rows.length; i++) { const r = rows[i], n = i + 1, date = isoDate(get(r, 'date')), unit = get(r, 'unit'), lh = parseFloat(get(r, 'laborHours').replace(/[^0-9.]/g, '')), lhv = isFinite(lh) && lh > 0 ? lh : null;
       if (lhv != null) { const ex = db.services.find(s => s.sheetRow === n && s.laborHours == null); if (ex) { ex.laborHours = lhv; res.laborFilled = (res.laborFilled || 0) + 1; } } /*LABOR1 backfill hours on rows already synced*/
+      if (date) { const tag = `[sheet row ${n}]`, ex = db.services.find(s => s.sheetRow === n || String(s.notes || '').includes(tag)); if (ex && ex.date !== date) { console.log('sheetsync datefix row', n, ex.date, '->', date); (res.dateFixed = res.dateFixed || []).push({ row: n, from: ex.date, to: date }); ex.date = date; } } /*DATEFIX1 sheet date edits flow to already-synced rows*/
       if (sent.has(n) || !date || !unit) continue;
       if (mode === 'skip') { sent.add(n); res.already++; continue; }
       const v = veh.get(norm(unit)); if (!v) { res.unknown.push({ row: n, unit: unit.slice(0, 40) }); continue; }
