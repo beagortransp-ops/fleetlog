@@ -639,8 +639,7 @@ const VIEWS = {
     const VV = db.vehicles, wm = VV.filter(v => Number(v.mileage) > 0).length, wv = VV.filter(v => v.vin).length; /*VEHPREM*/
     return `<div class="dsh svp"><div class="hx"><div><div class="hxk">Your fleet</div><h2>Trucks</h2><span>Add trucks &amp; update miles</span></div><div class="hxr"><b>${VV.length}</b><span>trucks</span></div><div class="hxb"><i style="width:100%"></i></div></div>
     <div class="kp dkp">${[['Trucks', VV.length, '#1a237e'], ['With miles', wm, '#2e7d32'], ['With VIN', wv, '#5b2a86']].map(([k, v, c]) => `<div class="ks" style="color:${c}"><b style="color:${c}">${v}</b><span>${k}</span></div>`).join('')}</div>
-    <div class="vwrap"><h2 style="margin:4px 0 2px">Add trucks</h2><div class="vsub">${db.vehicles.length} trucks in your fleet</div>
-      <div class="vseg"><button class="${M === 'one' ? 'on' : ''}" onclick="window.vMode='one';render()">One truck</button></div>${M === 'one' ? one : many}</div>
+    
     <div class="card"><h2>Trucks</h2><div class="tw"><table><tr><th>Unit #</th><th>Year / model</th><th>VIN</th><th>Mileage</th><th>Avg mi/day</th><th></th></tr>${db.vehicles.map(v => `<tr><td>${esc(v.truck)}${exTag(v)}</td><td>${esc([v.year, v.make, v.model].join(' '))}</td><td>${esc(v.vin)}</td>
       <td><input autocomplete="off" type="number" value="${v.mileage ?? ''}" style="width:110px" onchange="act(Promise.all([API.update('vehicles','${v.id}',{mileage:this.value}),API.add('mileageLog',{vehicleId:'${v.id}',date:today(),mileage:this.value})]))"></td>
       <td>${Math.round(FleetLogic.avgDailyMiles(db, v.id))}</td><td><button class="x" onclick="del('vehicles','${v.id}')">${IC('x',16)}</button></td></tr>`).join('')}</table></div><p style="font-size:12px;color:#666">Updating mileage here also records a reading used for the miles-per-day prediction.</p></div></div>`;
