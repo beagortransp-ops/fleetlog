@@ -219,8 +219,8 @@ const LRATE = () => { const r = Number(db && db.laborRate); return db && db.labo
 const LHRS = s => { if (!s) return 0; const h = Number(s.laborHours); if (s.laborHours != null && s.laborHours !== '' && isFinite(h) && h > 0) return h; const t = String(s.notes || ''), m = t.match(/labou?r[^0-9]{0,12}([0-9]+(?:\.[0-9]+)?)\s*(?:h|hr|hrs|hours?)\b/i) || t.match(/([0-9]+(?:\.[0-9]+)?)\s*(?:h|hr|hrs|hours?)\s+labou?r/i); return m ? Number(m[1]) : 0; };
 const LCOST = s => { if (!s) return 0; if (s.laborCost != null && s.laborCost !== '' && isFinite(Number(s.laborCost)) && Number(s.laborCost) > 0) return Number(s.laborCost); return Math.round(LHRS(s) * LRATE() * 100) / 100; };
 const RAW_TOT = s => (Number(s && s.cost) || 0) + LCOST(s);
-/*MIN30 $30 minimum charge for jobs dated 2026-10-29 or later; $0 jobs stay $0*/
-const MIN_CHG = 30, MIN_FROM = '2026-10-29';
+/*MIN30 $10 minimum charge for jobs dated 2026-10-29 or later; $0 jobs stay $0*/
+const MIN_CHG = 10, MIN_FROM = '2026-10-29';
 const MINAPPLY = s => { const t = RAW_TOT(s); return !!s && (s.date || '') >= MIN_FROM && t > 0 && t < MIN_CHG; };
 window.LABOR_TOT = s => MINAPPLY(s) ? MIN_CHG : RAW_TOT(s);
 const STOT = s => RAW_TOT(s); /*unchanged raw total, used by FL-MMR-1 only*/
