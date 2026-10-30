@@ -46,7 +46,7 @@ async function run(db, opts, mode) {
       if (keys.has(v.id + '|' + date + '|' + Math.round(cost * 100)) || keys.has(v.id + '|' + date + '|' + Math.round(pc * 100))) { sent.add(n); res.already++; continue; }
       const job = get(r, 'job'), status = get(r, 'status'), notes = get(r, 'notes'), mil = parseInt(get(r, 'mileage').replace(/[^0-9]/g, ''), 10) || null;
       const rec = { id: crypto.randomUUID(), vehicleId: v.id, date, mileage: mil, cost, shop: get(r, 'mechanic').slice(0, 80), category: (get(r, 'work') || job || 'Shop work').slice(0, 200),
-        parts: get(r, 'parts').slice(0, 300), downtimeDays: null, notes: [job && job + '.', status && 'Status: ' + status + '.', notes, `[sheet row ${n}]`].filter(Boolean).join(' ').slice(0, 1000), sheetRow: n, laborHours: lhv, location: get(r, 'location').slice(0, 200), jobType: job.slice(0, 200), workPerformed: get(r, 'work').slice(0, 1000), partsUsed: get(r, 'parts').slice(0, 300), shopSupplies: money(get(r, 'supplies')) }; /*JOBDETAILS1*/
+        parts: get(r, 'parts').slice(0, 300), downtimeDays: null, notes: notes.slice(0, 1000), status: status.slice(0, 60), sheetRow: n, laborHours: lhv, location: get(r, 'location').slice(0, 200), jobType: job.slice(0, 200), workPerformed: get(r, 'work').slice(0, 1000), partsUsed: get(r, 'parts').slice(0, 300), shopSupplies: money(get(r, 'supplies')) }; /*JOBDETAILS1*/
       db.services.push(rec); opts.bumpMileage && opts.bumpMileage(db, rec); keys.add(v.id + '|' + date + '|' + Math.round(cost * 100)); sent.add(n); res.added++; }
     S.sentRows = [...sent].sort((a, b) => a - b); S.lastError = null; S.detected = map;
   } catch (e) { S.lastError = String(e.message || e).slice(0, 300); }
