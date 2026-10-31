@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Driver inspection and problem report</title>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Driver problem report</title>
 <style>*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,sans-serif;background:#f3f4f9;color:#1d1f3a}header{background:linear-gradient(135deg,#5b2a86,#33184d);color:#fff;padding:18px 16px}header h1{margin:0;font-size:21px}header p{margin:4px 0 0;opacity:.85;font-size:14px}
 main{max-width:520px;margin:0 auto;padding:14px}label{display:block;font-weight:700;font-size:15px;margin:14px 0 6px}input,select,textarea{width:100%;font-size:17px;padding:13px;border:1.5px solid #cfd2e3;border-radius:12px;background:#fff;font-family:inherit}textarea{min-height:96px}
 .ph{display:flex;gap:10px}.ph button{flex:1}button{font-size:17px;font-weight:700;border:0;border-radius:12px;padding:15px;cursor:pointer}.sec{background:#fff;color:#5b2a86;border:1.5px solid #5b2a86}.go{width:100%;background:#e8742a;color:#fff;margin-top:20px;font-size:19px;padding:17px}.go:disabled{opacity:.6}
@@ -9,7 +9,7 @@ main{max-width:520px;margin:0 auto;padding:14px}label{display:block;font-weight:
 .prevr{background:#fff7ec;border:1px solid #f0c48a;border-radius:12px;padding:10px 12px;margin-top:12px;font-size:14px}.prevr.okp{background:#eef7ee;border-color:#a7d3a9}
 #sigc{width:100%;height:150px;background:#fff;border:1.5px dashed #9aa0bd;border-radius:12px;touch-action:none;display:block}.sigrow{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:#667;margin-top:4px}.sigrow button{padding:6px 12px;font-size:13px;background:#eee;color:#333}
 svg{vertical-align:-3px}</style></head>
-<body><header><h1 id="ht">Driver</h1><p id="hp">Inspect your truck before and after each trip, or report a problem.</p></header><main id="m"><p>Loading…</p></main>
+<body><header><h1 id="ht">Driver</h1><p id="hp">Report a problem with your truck.</p></header><main id="m"><p>Loading…</p></main>
 <script src="/ux.js?v=20261025b"></script>
 <script>
 const T = location.pathname.split('/')[2] || '', $ = s => document.querySelector(s), esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -17,12 +17,12 @@ let photo = null, trucks = [];
 async function load() {
   const r = await fetch('/api/driver/' + encodeURIComponent(T) + '/trucks'); const j = await r.json().catch(() => ({}));
   if (!r.ok) { $('#m').innerHTML = `<div class="msg err">${esc(j.error || 'This link is not working.')}</div>`; return; }
-  trucks = j.trucks; today = j.today || []; dvir();
+  trucks = j.trucks; today = j.today || []; form();
 }
 /*DVIR1 pre-trip / post-trip with signature; shows the last report and its mechanic sign-off*/
 const ITEMS = [['Tires', 'Tread, pressure, damage'], ['Brakes', 'Pedal feel, parking brake, air/lines'], ['Lights/signals', 'Head, tail, brake, turn, markers'], ['Horn', 'Works'], ['Mirrors & windshield', 'Clean, no cracks, adjusted'], ['Wipers', 'Blades and washer fluid'], ['Fluid leaks', 'Oil, coolant, fuel under truck'], ['Steering', 'No extra play, no pulling'], ['Dash lights', 'No warning lights on dash'], ['Emergency kit', 'Triangles, extinguisher, first aid'], ['Body/doors', 'Damage, doors, steps']];
 let today = [], res = {}, sigInk = false;
-const tabs = on => `<div class="tabs"><button type="button" class="${on === 'd' ? 'on' : ''}" onclick="dvir()">${IC('checklist',16)} Inspection</button><button type="button" class="${on === 'r' ? 'on' : ''}" onclick="form()">${IC('camera',16)} Report a problem</button></div>`;
+const tabs = on => "";
 function myTruck() { const n = (localStorage.getItem('dlName') || '').toLowerCase(), a = today.find(x => n && x.driver.toLowerCase() === n); return a ? a.vehicleId : localStorage.getItem('dlTruck') || ''; }
 function dvir() {
   $('#ht').textContent = 'Driver inspection (DVIR)'; res = {}; sigInk = false;
