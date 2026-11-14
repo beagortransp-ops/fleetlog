@@ -55,7 +55,14 @@ async function authRoute(req, res, b) {
   return send(res, 404, { error: 'no auth route' });
 }
 /*GMAILSMTP1 owner's records go out from the owner's own Gmail (GMAIL_USER + GMAIL_APP_PASSWORD on Render), so From = the sending account and Yahoo/Gmail DMARC never blocks it*/
-const GM_USER = String(process.env.GMAIL_USER || '').trim(), GM_PASS = String(process.env.GMAIL_APP_PASSWORD || '').replace(/\s+/g, '');
+const { GM_USER, GM_PASS } = (() => { /*GMAILSWAP1 tolerate swapped or missing GMAIL_USER / GMAIL_APP_PASSWORD*/
+  const a = String(process.env.GMAIL_USER || '').trim(), b = String(process.env.GMAIL_APP_PASSWORD || '').trim();
+  const isMail = v => /@/.test(v), code = v => v.replace(/\s+/g, '');
+  let u = '', pw = '';
+  if (isMail(a)) { u = a; pw = code(b); } else if (isMail(b)) { u = b; pw = code(a); }
+  else { pw = code(b || a); if (pw) u = String(process.env.OWNER_GMAIL || 'beagortransp@gmail.com').trim(); }
+  return { GM_USER: u, GM_PASS: pw };
+})();
 const gmailOn = acct => !!(GM_USER && GM_PASS && acct && storeKey(acct) === '');
 const gmailSend = ({ to, subject, text, replyTo, filename, pdfB64 }) => new Promise((ok, no) => {
   const tls = require('tls'), sock = tls.connect(Number(process.env.SMTP_TEST_PORT) || 465, process.env.SMTP_TEST_PORT ? '127.0.0.1' : 'smtp.gmail.com', process.env.SMTP_TEST_PORT ? { rejectUnauthorized: false } : { servername: 'smtp.gmail.com' }); sock.setEncoding('utf8'); sock.setTimeout(30000, () => { sock.destroy(); no(new Error('smtp timeout')); });
