@@ -54,6 +54,23 @@ async function authRoute(req, res, b) {
   }
   return send(res, 404, { error: 'no auth route' });
 }
+/*GMAILSMTP1 owner's records go out from the owner's own Gmail (GMAIL_USER + GMAIL_APP_PASSWORD on Render), so From = the sending account and Yahoo/Gmail DMARC never blocks it*/
+const GM_USER = String(process.env.GMAIL_USER || '').trim(), GM_PASS = String(process.env.GMAIL_APP_PASSWORD || '').replace(/\s+/g, '');
+const gmailOn = acct => !!(GM_USER && GM_PASS && acct && storeKey(acct) === '');
+const gmailSend = ({ to, subject, text, replyTo, filename, pdfB64 }) => new Promise((ok, no) => {
+  const tls = require('tls'), sock = tls.connect(Number(process.env.SMTP_TEST_PORT) || 465, process.env.SMTP_TEST_PORT ? '127.0.0.1' : 'smtp.gmail.com', process.env.SMTP_TEST_PORT ? { rejectUnauthorized: false } : { servername: 'smtp.gmail.com' }); sock.setEncoding('utf8'); sock.setTimeout(30000, () => { sock.destroy(); no(new Error('smtp timeout')); });
+  const bnd = 'FL' + crypto.randomBytes(12).toString('hex'), enc = x => '=?UTF-8?B?' + Buffer.from(x).toString('base64') + '?=';
+  const hdr = ['From: ' + enc('Sérgio da Costa') + ' <' + GM_USER + '>', 'To: <' + to + '>', replyTo && replyTo.toLowerCase() !== GM_USER.toLowerCase() ? 'Reply-To: <' + replyTo + '>' : '', 'Subject: ' + enc(subject), 'Date: ' + new Date().toUTCString().replace('GMT', '+0000'), 'Message-ID: <' + crypto.randomBytes(16).toString('hex') + '@fleetlog>', 'MIME-Version: 1.0', 'Content-Type: multipart/mixed; boundary="' + bnd + '"'].filter(Boolean).join('\r\n'), msg = hdr + '\r\n\r\n' + [
+    '--' + bnd, 'Content-Type: text/plain; charset=UTF-8', 'Content-Transfer-Encoding: base64', '', Buffer.from(text).toString('base64').replace(/.{76}/g, '$&\r\n'),
+    '--' + bnd, 'Content-Type: application/pdf; name="' + filename + '"', 'Content-Disposition: attachment; filename="' + filename + '"', 'Content-Transfer-Encoding: base64', '', pdfB64.replace(/.{76}/g, '$&\r\n'), '--' + bnd + '--', ''].join('\r\n');
+  const steps = ['EHLO fleetlog', 'AUTH PLAIN ' + Buffer.from('\0' + GM_USER + '\0' + GM_PASS).toString('base64'), 'MAIL FROM:<' + GM_USER + '>', 'RCPT TO:<' + to + '>', 'DATA', msg.replace(/\r\n\./g, '\r\n..') + '\r\n.', 'QUIT'];
+  const want = ['220', '250', '235', '250', '250', '354', '250', '221']; let i = 0, buf = '', done = false;
+  sock.on('data', d => { buf += d; if (!buf.endsWith('\r\n')) return; const last = buf.split('\r\n').filter(Boolean).pop(); if (!/^\d{3} /.test(last)) return; buf = '';
+    if (!last.startsWith(want[i])) { sock.destroy(); return no(new Error('smtp ' + last.slice(0, 160))); }
+    if (i >= steps.length) { done = true; sock.end(); return ok(); }
+    if (i === 6) done = true; sock.write(steps[i] + '\r\n'); i++; });
+  sock.on('error', e => done ? ok() : no(e)); sock.on('close', () => done ? ok() : no(new Error('smtp closed')));
+});
 const syncPlan = (acct, db) => { if (!acct) return; const bl = db.billing; acct.plan = bl && bl.status === 'paid' ? bl.plan : 'trial'; acct.cycle = bl && bl.status === 'paid' ? (bl.cycle || bl.period || null) : null; acct.activePlan = acct.plan; usave(); }; /*ACCTS1 billing mirrored onto the account*/
 if (!PIN_HASH) console.warn('WARNING: PIN_HASH not set – API is open. Set it before going live.');
 const FAILS = new Map(), MAXF = 5, WIN = 15 * 60 * 1000; // wrong-PIN limit: 5 per 15 min per IP
@@ -440,12 +457,13 @@ http.createServer(async (req, res) => {
       const rows = db[c].map(r => r.vehicleId ? { truck: trucks[r.vehicleId], ...r } : r);
       res.writeHead(200, { 'Content-Type': 'text/csv', 'Content-Disposition': `attachment; filename="${c}.csv"` }); return res.end(L.toCSV(rows));
     }
-    if (a === 'email-record' && m === 'GET' && !b) return send(res, 200, { server: !!process.env.RESEND_API_KEY }); /*EMAILPDF1*/
+    if (a === 'email-record' && m === 'GET' && !b) return send(res, 200, { server: !!process.env.RESEND_API_KEY || gmailOn(acct), gmail: gmailOn(acct) ? GM_USER : '', ownerGmail: acct && storeKey(acct) === '' ? (GM_USER || String(process.env.OWNER_GMAIL || 'beagortransp@gmail.com')) : '' }); /*EMAILPDF1*/
     if (a === 'email-record' && m === 'POST' && !b) { /*EMAILREC1 EMAILPDF1 send a form as a PDF attachment via Resend; without a key the device shares/downloads it*/
       const o = await body(req), to = String(o.to || '').trim().toLowerCase().slice(0, 200), subj = String(o.subject || 'FleetLog record').replace(/[\r\n]/g, ' ').slice(0, 200), text = String(o.text || '').slice(0, 2000);
       const pdf = String(o.pdf || '').replace(/^data:[^,]*,/, ''), fname = (String(o.filename || 'FleetLog-record.pdf').replace(/[^\w.\- ]/g, '').slice(0, 80) || 'FleetLog-record.pdf').replace(/(\.pdf)?$/i, '.pdf');
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return send(res, 400, { error: 'Enter a valid email.' });
       if (!pdf || pdf.length > 14e6 || !/^[A-Za-z0-9+/=]+$/.test(pdf) || !Buffer.from(pdf.slice(0, 8), 'base64').toString('latin1').startsWith('%PDF')) return send(res, 400, { error: 'The PDF could not be created.' });
+      if (gmailOn(acct)) { try { await gmailSend({ to, subject: subj, text: text || 'The record is attached as a PDF.', replyTo: '', filename: fname, pdfB64: pdf }); return send(res, 200, { ok: true, from: GM_USER }); } catch (e) { console.log('email-record: gmail send failed', String(e.message || e).slice(0, 160)); return send(res, 200, { ok: false, mailto: true, gmailError: true }); } } /*GMAILSMTP1*/
       if (!process.env.RESEND_API_KEY) return send(res, 200, { ok: false, mailto: true });
       try {
         const r = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: 'Bearer ' + process.env.RESEND_API_KEY, 'Content-Type': 'application/json' },

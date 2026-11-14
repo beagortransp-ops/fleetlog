@@ -979,10 +979,13 @@ window.emailRec = async kind => { const el = document.getElementById(kind === 'v
     const note = 'Attached: ' + name + truck + ' (PDF).';
     const go = box.querySelector('#emGo'); go.disabled = true; msg('Making the PDF...');
     let blob; try { blob = await recPdf(el); } catch (e) { go.disabled = false; return msg('Could not make the PDF. Use Print / Save PDF instead.', 1); }
-    let srv = false; if (!window.DEMO) try { srv = (await API.req('GET', 'email-record')).server; } catch (e) {}
+    let srv = false, og = ''; if (!window.DEMO) try { const q = await API.req('GET', 'email-record'); srv = q.server; og = q.ownerGmail || ''; } catch (e) {} /*GMAILSMTP1*/
     if (srv) { msg('Sending...'); try { const b64 = await new Promise((ok, no) => { const fr = new FileReader(); fr.onload = () => ok(String(fr.result).split(',')[1]); fr.onerror = no; fr.readAsDataURL(blob); });
-      const r = await API.req('POST', 'email-record', { to, subject, text: note, pdf: b64, filename }); if (r && r.ok) { go.disabled = false; return msg('Sent to ' + to + ' with the PDF attached.'); } } catch (e) {} }
+      const r = await API.req('POST', 'email-record', { to, subject, text: note, pdf: b64, filename }); if (r && r.ok) { go.disabled = false; return msg('Sent to ' + to + ' from ' + (r.from || 'FleetLog') + ' with the PDF attached.'); } } catch (e) {} }
     go.disabled = false; const file = new File([blob], filename, { type: 'application/pdf' });
+    if (og) { const url0 = URL.createObjectURL(blob), a0 = document.createElement('a'); a0.href = url0; a0.download = filename; document.body.appendChild(a0); a0.click(); a0.remove(); setTimeout(() => URL.revokeObjectURL(url0), 60000); /*GMAILSMTP1 owner: never the phone's mail app (Yahoo From gets blocked); open Gmail compose as the owner's Gmail*/
+      window.open('https://mail.google.com/mail/?authuser=' + encodeURIComponent(og) + '&view=cm&fs=1&to=' + encodeURIComponent(to) + '&su=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(note), '_blank');
+      return msg('Downloaded ' + filename + ' and opened Gmail (' + og + '). Attach the PDF there, then press Send.'); }
     const share = async () => { try { await navigator.share({ files: [file], title: subject, text: note + ' Send to: ' + to }); msg('Pick Mail and send it to ' + to + '. The PDF is attached.'); return true; } catch (e) { if (e && e.name === 'AbortError') { msg('Sharing cancelled.', 1); return true; } return false; } };
     const touch = /iPhone|iPad|iPod|Android|Mobile/i.test(navigator.userAgent) || (navigator.maxTouchPoints || 0) > 0;
     if (touch && navigator.canShare && navigator.canShare({ files: [file] })) {
