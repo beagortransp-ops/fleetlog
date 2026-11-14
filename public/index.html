@@ -569,7 +569,7 @@ const VIEWS = {
     const list = [...rows, ...Array(Math.max(0, 6 - rows.length)).fill(null)];
     return `<div class="dsh mmrhd"><div class="hx"><div><div class="hxk">Monthly</div><h2>Monthly record</h2><span>${esc(v.truck || '')} · ${mname}</span></div><div class="hxr"><b>${money(tot)}</b><span>this month</span></div><div class="hxb"><i style="width:100%"></i></div></div>
     <div class="kp dkp">${[['Entries', rows.length, '#1a237e'], ['Total cost', money(tot), '#2e7d32'], ['Trucks', db.vehicles.length, '#5b2a86']].map(([k, vv, c]) => `<div class="ks" style="color:${c}"><b style="color:${c}">${vv}</b><span>${k}</span></div>`).join('')}</div></div><!--MMRPREM-->
-    <div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:8px" id="mmrCtl"><label>Truck <select onchange="window.mmrTruck=this.value;render()">${db.vehicles.map(x => `<option value="${x.id}" ${x.id === v.id ? 'selected' : ''}>${esc(x.truck)}</option>`).join('')}</select></label><label>Month <input type="month" value="${ym}" onchange="window.mmrMonth=this.value;window.mmrMY=new Date(this.value+'-15').toLocaleString('en-US',{month:'long',year:'numeric'});try{localStorage.setItem('mmrMY',window.mmrMY)}catch(e){};render()"></label><button class="b s" onclick="recPrint('mmr')">Print / Save PDF</button><button class="b s" onclick="emailRec('mmr')"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>Email</button><button class="b" onclick="printAll()">Print all trucks (${db.vehicles.length})</button></div>
+    <div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:8px" id="mmrCtl"><label>Truck <select onchange="window.mmrTruck=this.value;render()">${db.vehicles.map(x => `<option value="${x.id}" ${x.id === v.id ? 'selected' : ''}>${esc(x.truck)}</option>`).join('')}</select></label><label>Month <input type="month" value="${ym}" onchange="window.mmrMonth=this.value;window.mmrMY=new Date(this.value+'-15').toLocaleString('en-US',{month:'long',year:'numeric'});try{localStorage.setItem('mmrMY',window.mmrMY)}catch(e){};render()"></label><button class="b s" onclick="recPrint('mmr')">Print / Save PDF</button><button class="b s" onclick="emailRec('mmr')"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>Email</button><button class="b s" onclick="emailAllMmr()"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>Email all trucks</button><button class="b" onclick="printAll()">Print all trucks (${db.vehicles.length})</button></div>
     <div id="mmrForm" style="max-width:640px;background:#fff;color:#000;font-family:Arial,Helvetica,sans-serif;font-size:10.5px;line-height:1.3;padding:14px 18px;box-shadow:0 0 6px #0003">
     <div style="border:1px solid #333;background:#ddd;text-align:center;font-weight:bold;font-size:14px;padding:3px">Monthly Maintenance Record</div><!--MMRMATCH2-->
     <div style="text-align:right;font-weight:bold;font-size:9px;margin:3px 0">FL-MMR-1</div>
@@ -996,11 +996,50 @@ window.emailRec = async kind => { const el = document.getElementById(kind === 'v
     setTimeout(() => { location.href = 'mailto:' + encodeURIComponent(to) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(note + '\n\nPlease attach the downloaded file ' + filename + ' before sending.'); }, 400);
     msg('Downloaded ' + filename + ' and opened your mail app. Attach the PDF there, then press Send.'); };
 };
+/*BULKMMR1 Email all trucks: every non-example truck's FL-MMR-1 for the selected month, built with the same locked MMR render, sent as ONE email with one PDF per truck (split into parts only if over ~17 MB)*/
+window.BULKMMR = { scale: 2, q: 0.8, maxRaw: 17e6 };
+window.emailAllMmr = async () => { if (!document.getElementById('mmrForm')) return;
+  let box = document.getElementById('emAllBox'); if (box) { if (!box.dataset.busy) box.remove(); return; }
+  const vs = (db.vehicles || []).filter(v => !v.example), ym = window.mmrMonth || '', mlabel = ym ? new Date(ym + '-15').toLocaleString('en-US', { month: 'long', year: 'numeric' }) : '';
+  const name = 'Monthly Maintenance Record (FL-MMR-1)';
+  box = document.createElement('div'); box.id = 'emAllBox'; box.className = 'card'; box.setAttribute('style', 'position:fixed;left:50%;top:80px;transform:translateX(-50%);z-index:9999;width:min(520px,calc(100vw - 24px));box-sizing:border-box;margin:0;padding:14px;border-left:4px solid #5b2a86;background:#fff;box-shadow:0 10px 40px #0005');
+  box.innerHTML = '<b style="color:#5b2a86">Email all trucks: ' + esc(name) + '</b><div style="font-size:13px;color:#556;margin-top:4px">' + vs.length + ' trucks · ' + esc(mlabel) + ' · one email, one PDF per truck</div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-top:8px"><label style="flex:1;min-width:200px">Send to<input id="emAllTo" type="email" list="emAllList" placeholder="name@example.com" autocomplete="email"></label><datalist id="emAllList"></datalist><button class="b" style="width:auto;background:#e8742a;border-color:#e8742a" id="emAllGo">Send</button><button class="b s" style="width:auto" id="emAllX">Cancel</button></div><div id="emAllMsg" style="font-size:13px;margin-top:6px;color:#556"></div>';
+  document.body.appendChild(box); const msg = (t, bad) => { const m = box.querySelector('#emAllMsg'); m.style.color = bad ? '#c62828' : bad === 0 ? '#556' : '#2e7d32'; m.textContent = t; };
+  const go = box.querySelector('#emAllGo'), cx = box.querySelector('#emAllX'); cx.onclick = () => { if (!box.dataset.busy) box.remove(); };
+  if (!vs.length) { go.disabled = true; return msg('No trucks to send.', 1); }
+  try { const d = await API.req('GET', 'team'), L = []; if (d.owner) L.push(d.owner.email); (d.members || []).forEach(x => L.push(x.email)); (d.invites || []).forEach(x => x.email && L.push(x.email));
+    box.querySelector('#emAllList').innerHTML = [...new Set(L.filter(Boolean))].map(e => '<option value="' + esc(e) + '">').join(''); } catch (e) {}
+  box.querySelector('#emAllTo').focus();
+  go.onclick = async () => { const to = box.querySelector('#emAllTo').value.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return msg('Enter a valid email address.', 1);
+    const busy = on => { go.disabled = cx.disabled = on; if (on) box.dataset.busy = '1'; else delete box.dataset.busy; };
+    busy(true); msg('Checking email setup...', 0);
+    let srv = false; if (!window.DEMO) try { srv = !!(await API.req('GET', 'email-record')).server; } catch (e) {}
+    if (!srv) { busy(false); return msg('Email is not set up on the server, so nothing was sent. Nothing was downloaded.', 1); }
+    const d = new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10), keep = window.mmrTruck, atts = [], used = new Set();
+    try { for (let i = 0; i < vs.length; i++) { const v = vs[i]; msg('Building ' + (i + 1) + ' of ' + vs.length + '…', 0);
+        window.mmrTruck = v.id; render(); await new Promise(r => setTimeout(r, 30)); const f = document.getElementById('mmrForm'); if (!f) throw new Error('form');
+        const blob = await recPdf(f, { scale: BULKMMR.scale, q: BULKMMR.q }), truck = v.truck ? ' - ' + v.truck : '';
+        let fn = ('FleetLog-FL-MMR-1' + truck.replace(/[^\w]+/g, '-') + '-' + d + '.pdf').replace(/-+/g, '-'); for (let k = 2; used.has(fn); k++) fn = fn.replace(/(-n\d+)?\.pdf$/, '-n' + k + '.pdf'); used.add(fn);
+        const b64 = await new Promise((ok, no) => { const fr = new FileReader(); fr.onload = () => ok(String(fr.result).split(',')[1]); fr.onerror = no; fr.readAsDataURL(blob); });
+        atts.push({ filename: fn, pdf: b64, size: blob.size, truck: v.truck || '' }); } }
+    catch (e) { window.mmrTruck = keep; render(); busy(false); return msg('Could not make the PDFs (' + (atts.length + 1) + ' of ' + vs.length + '). Nothing was sent.', 1); }
+    window.mmrTruck = keep; render();
+    const parts = []; atts.forEach(a => { const p = parts[parts.length - 1]; if (p && p.raw + a.size <= BULKMMR.maxRaw) { p.list.push(a); p.raw += a.size; } else parts.push({ list: [a], raw: a.size }); });
+    let sent = 0, from = ''; for (let k = 0; k < parts.length; k++) { const P = parts[k], tag = parts.length > 1 ? ' (part ' + (k + 1) + ' of ' + parts.length + ')' : '';
+      msg('Sending' + (parts.length > 1 ? ' part ' + (k + 1) + ' of ' + parts.length : '') + ' (' + P.list.length + ' PDFs, ' + (P.raw / 1e6).toFixed(1) + ' MB)…', 0);
+      const subject = 'FleetLog ' + name + ' - All trucks - ' + mlabel + tag, text = 'Attached: ' + name + ', ' + mlabel + tag + ', ' + P.list.length + ' trucks (one PDF each):\n' + P.list.map(a => '- ' + (a.truck || a.filename)).join('\n');
+      let r = null, err = ''; try { r = await API.req('POST', 'email-record', { to, subject, text, attachments: P.list.map(a => ({ filename: a.filename, pdf: a.pdf })) }); } catch (e) { err = String(e.message || e); }
+      if (!r || !r.ok) { busy(false); return msg((sent ? 'Sent ' + sent + ' records, but part ' + (k + 1) + ' of ' + parts.length + ' failed: ' : 'Could not send: ') + ((r && r.error) || err || 'the server did not send the email.') + ' Nothing was downloaded.', 1); }
+      sent += P.list.length; from = r.from || from; }
+    busy(false); go.textContent = 'Done'; go.onclick = () => box.remove(); cx.textContent = 'Close';
+    msg('Sent ' + sent + ' records to ' + to + ' from ' + (from || 'FleetLog') + (parts.length > 1 ? ' in ' + parts.length + ' emails' : '') + '.'); };
+};
 </script><script>/*EMAILPDF1 PDF of the on-screen form (vendored html2canvas + jsPDF, loaded on demand)*/
 window.loadJs = src => new Promise((ok, no) => { if (document.querySelector('script[src="' + src + '"]')) return ok(); const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = no; document.head.appendChild(s); });
 /*ONEPAGE1 one fixed render for Print and Email: clone the form into an off-screen fixed-width box (same size every time, any screen),
   wait for fonts, draw it once with html2canvas, then fit that one image onto one US Letter page. Print and the PDF use the same image.*/
-window.recCanvas = async el => { await loadJs('/vendor/html2canvas.min.js'); try { fillPrintDate(); } catch (e) {} try { await document.fonts.ready; } catch (e) {}
+window.recCanvas = async (el, o) => { /*BULKMMR1 o.scale: lower resolution for Email all trucks only; default 3 unchanged*/ await loadJs('/vendor/html2canvas.min.js'); try { fillPrintDate(); } catch (e) {} try { await document.fonts.ready; } catch (e) {}
   const isM = el.id === 'mmrForm', W = isM ? 720 : 780, c = el.cloneNode(true);
   const si = el.querySelectorAll('input,select,textarea'), ci = c.querySelectorAll('input,select,textarea');
   si.forEach((e, i) => { const d = ci[i]; if (!d) return; if (e.type === 'checkbox' || e.type === 'radio') { d.checked = e.checked; if (e.checked) d.setAttribute('checked', ''); else d.removeAttribute('checked'); } else if (e.tagName === 'SELECT') { [...d.options].forEach((o, j) => { o.selected = j === e.selectedIndex; if (o.selected) o.setAttribute('selected', ''); else o.removeAttribute('selected'); }); } else if (e.tagName === 'TEXTAREA') { d.textContent = e.value; d.value = e.value; } else { d.setAttribute('value', e.value); d.value = e.value; } });
@@ -1013,7 +1052,7 @@ window.recCanvas = async el => { await loadJs('/vendor/html2canvas.min.js'); try
   const host = document.createElement('div'); host.setAttribute('aria-hidden', 'true'); host.style.cssText = 'position:fixed;left:-20000px;top:0;width:' + W + 'px;background:#fff;z-index:-1;pointer-events:none';
   host.appendChild(c); document.body.appendChild(host);
   try { await Promise.all([...c.querySelectorAll('img')].map(i => i.complete ? 0 : new Promise(r => { i.onload = i.onerror = r; })));
-    return await html2canvas(c, { scale: 3, backgroundColor: '#ffffff', useCORS: true, logging: false, width: W, windowWidth: 1280, windowHeight: 1000, scrollX: 0, scrollY: 0, x: 0, y: 0, onclone: (doc, ce) => {
+    return await html2canvas(c, { scale: (o && o.scale) || 3, backgroundColor: '#ffffff', useCORS: true, logging: false, width: W, windowWidth: 1280, windowHeight: 1000, scrollX: 0, scrollY: 0, x: 0, y: 0, onclone: (doc, ce) => {
   const reps = [], cci = ce.querySelectorAll('input,select,textarea'); si.forEach((e, i) => { const d = cci[i]; if (!d || e.type === 'hidden' || e.type === 'checkbox' || e.type === 'radio' || e.type === 'file') return; /*draw values as plain text: html2canvas input drawing is unreliable*/
     const cs = doc.defaultView.getComputedStyle(d), v = e.tagName === 'SELECT' ? ((e.options[e.selectedIndex] || {}).text || '') : e.type === 'date' && e.value ? e.value.slice(5, 7) + '/' + e.value.slice(8) + '/' + e.value.slice(0, 4) : e.value;
     const sp = doc.createElement('span'); sp.className = d.className; sp.setAttribute('style', d.getAttribute('style') || ''); sp.textContent = v || '';
@@ -1022,22 +1061,21 @@ window.recCanvas = async el => { await loadJs('/vendor/html2canvas.min.js'); try
     sp.style.height = d.offsetHeight ? d.offsetHeight + 'px' : cs.height; sp.style.lineHeight = (e.tagName === 'TEXTAREA' ? cs.lineHeight : Math.max(1, (d.offsetHeight || 16) - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - parseFloat(cs.borderTopWidth) - parseFloat(cs.borderBottomWidth)) + 'px');
     sp.style.display = cs.display === 'block' || cs.display === 'flex' ? 'block' : 'inline-block'; sp.style.overflow = 'hidden'; sp.style.whiteSpace = e.tagName === 'TEXTAREA' ? 'pre-wrap' : 'nowrap'; reps.push([d, sp]); }); reps.forEach(([d, sp]) => d.replaceWith(sp)); if (ce.id === 'mmrForm') { const th0 = ce.querySelector('table th'); if (th0 && ce.scrollHeight > 960) th0.style.width = '20%'; const fz = [...ce.querySelectorAll('[style*="font-size"]')].map(n => [n, parseFloat(n.style.fontSize)]), base = parseFloat(ce.style.fontSize) || 12.6; for (let k = 0.95; ce.scrollHeight > 960 && k >= 0.7; k -= 0.05) { ce.style.fontSize = (base * k) + 'px'; fz.forEach(([n, v]) => { if (v) n.style.fontSize = (v * k) + 'px'; }); } /*MMRMATCH2 long months: tighten type before shrinking the page*/ } if (ce.id === 'mmrForm') { const H = 960, tr = [...ce.querySelectorAll('table tr')].slice(1), ex = H - ce.scrollHeight; if (ex > 0 && tr.length) { const add = Math.min(30, ex / tr.length); tr.forEach(r => { r.style.height = (r.getBoundingClientRect().height + add) + 'px'; }); } ce.style.minHeight = H + 'px'; } } }); }
   finally { host.remove(); } };
-window.recPdf = async el => { const c = await recCanvas(el); await loadJs('/vendor/jspdf.umd.min.js');
+window.recPdf = async (el, o) => { const c = await recCanvas(el, o); await loadJs('/vendor/jspdf.umd.min.js');
   const pdf = new jspdf.jsPDF({ unit: 'pt', format: 'letter', orientation: 'portrait', compress: true }); try { pdf.setFileId('F1EE7106F1EE7106F1EE7106F1EE7106'); const t = new Date(); t.setHours(0, 0, 0, 0); pdf.setCreationDate(t); pdf.setProperties({ title: el.id === 'virForm' ? 'Vehicle Inspection & Maintenance Record FL-BIT-1' : 'Monthly Maintenance Record FL-MMR-1', creator: 'FleetLog' }); } catch (e) {} /*PRINTPDF1 same bytes for Print and Email*/
   const pw = 612, ph = 792, m = c.width / c.height >= 0.74 && c.width / c.height <= 0.76 ? 36 : 22, aw = pw - 2 * m, ah = ph - 2 * m; let w = aw, h = c.height * aw / c.width; if (h > ah) { w = w * ah / h; h = ah; }
-  pdf.addImage(c.toDataURL('image/jpeg', 0.92), 'JPEG', (pw - w) / 2, m, w, h);
+  pdf.addImage(c.toDataURL('image/jpeg', (o && o.q) || 0.92), 'JPEG', (pw - w) / 2, m, w, h);
   return pdf.output('blob'); };
 window.recPrint = async kind => { /*PRINTPDF1 Print = the exact same one-page PDF that Email sends (no browser page CSS, headers, paper-size or Safari quirks)*/
+  /*PRINTPDF2 every device: open a tab now (inside the tap/click, so it is not a blocked pop-up), make the PDF, then show it in that tab. No hidden PDF iframe (Chrome/Edge printed blank).*/
   const el = document.getElementById(kind === 'vir' ? 'virForm' : 'mmrForm'); if (!el) return;
-  const ua = navigator.userAgent, touch = /iPhone|iPad|iPod|Android|Mobile/i.test(ua) || (navigator.maxTouchPoints || 0) > 0, safari = /Safari/i.test(ua) && !/Chrome|Chromium|CriOS|FxiOS|Edg|Android/i.test(ua);
-  let tab = null; if (touch || safari) { try { tab = window.open('', '_blank'); if (tab) tab.document.write('<title>FleetLog PDF</title><p style="font:18px system-ui,sans-serif;padding:24px">Making the PDF…</p>'); } catch (e) { tab = null; } } /*open now, inside the tap, so it is not blocked as a pop-up*/
-  let blob; try { blob = await recPdf(el); } catch (e) { if (tab) tab.close(); return kind === 'vir' ? virPrint() : doPrint(false); }
+  const touch = /iPhone|iPad|iPod|Android|Mobile/i.test(navigator.userAgent) || (navigator.maxTouchPoints || 0) > 0;
+  let tab = null; try { tab = window.open('', '_blank'); if (tab) tab.document.write('<title>FleetLog PDF</title><p style="font:18px system-ui,sans-serif;padding:24px">Making the PDF…</p>'); } catch (e) { tab = null; }
+  let blob; try { blob = await recPdf(el); } catch (e) { if (tab) try { tab.close(); } catch (x) {} return kind === 'vir' ? virPrint() : doPrint(false); }
   const url = URL.createObjectURL(blob); window.__recPdf = blob; setTimeout(() => URL.revokeObjectURL(url), 300000);
-  const name = 'FleetLog-' + (kind === 'vir' ? 'FL-BIT-1' : 'FL-MMR-1') + '.pdf';
-  const dl = () => { const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); try { toast('PDF downloaded. Open it and print.'); } catch (e) {} };
-  if (touch || safari || navigator.pdfViewerEnabled === false) { if (tab) { try { tab.location.href = url; return; } catch (e) { tab.close(); } } const w = window.open(url, '_blank'); if (!w) dl(); return; } /*phone/Safari: PDF opens in its own tab; print from Share or File > Print*/
-  document.getElementById('recPF')?.remove(); const f = document.createElement('iframe'); f.id = 'recPF'; f.title = 'Print'; f.setAttribute('aria-hidden', 'true');
-  f.style.cssText = 'position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:0;pointer-events:none'; let done = false;
-  f.onload = () => setTimeout(() => { if (done) return; done = true; try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) { if (!window.open(url, '_blank')) dl(); } }, 400);
-  f.src = url; document.body.appendChild(f); setTimeout(() => { if (!done) { done = true; if (!window.open(url, '_blank')) dl(); } }, 8000); };
+  const name = 'FleetLog-' + (kind === 'vir' ? 'FL-BIT-1' : 'FL-MMR-1') + '.pdf', say = t => { try { toast(t); } catch (e) {} };
+  const opened = () => say(touch ? 'PDF opened in a new tab: tap Share > Print.' : 'PDF opened in a new tab: press the printer icon (or Share > Print on phone).');
+  const dl = () => { const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); say('PDF downloaded. Open it and print.'); };
+  if (tab && !tab.closed) { try { tab.location.href = url; return opened(); } catch (e) { try { tab.close(); } catch (x) {} } }
+  let w = null; try { w = window.open(url, '_blank'); } catch (e) {} if (w) return opened(); dl(); };
 </script></body></html>
