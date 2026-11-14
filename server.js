@@ -286,8 +286,8 @@ function makeInspection(db, v, o, extra) {
 }
 const lastInsp = (db, vid) => db.inspections.filter(r => r.vehicleId === vid && !r.example).sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(b.at || '').localeCompare(String(a.at || '')))[0] || null;
 /*TEAM1 team members: a member account (memberOf = owner's store key) opens the owner's store with role admin|user. Invites live in users.json.*/
-const roleOf = u => !u ? null : u.memberOf != null ? (u.role === 'admin' ? 'admin' : u.role === 'driver' ? 'driver' : 'user') : 'owner';
-const ROLE = r => r === 'admin' ? 'admin' : r === 'driver' ? 'driver' : 'user'; /*DRIVERROLE1*/
+const roleOf = u => !u ? null : u.memberOf != null ? (u.role === 'admin' ? 'admin' : u.role === 'driver' ? 'driver' : u.role === 'viewer' ? 'viewer' : 'user') : 'owner'; /*VIEWONLY1*/
+const ROLE = r => r === 'admin' ? 'admin' : r === 'driver' ? 'driver' : r === 'viewer' ? 'viewer' : 'user'; /*DRIVERROLE1*/
 const storeOwner = key => UDB.users.find(x => x.memberOf == null && baseKey(x) === key) || null;
 const killSessions = uid => { for (const [k, s] of Object.entries(UDB.sessions)) if (s.uid === uid) delete UDB.sessions[k]; };
 const INV_DAYS = 7;
@@ -387,12 +387,13 @@ http.createServer(async (req, res) => {
     const user = storeKey(acct), db = getDb(user);
     { const rl = roleOf(acct); /*TEAM1 server-side role checks*/
       if (rl === 'user' && (USER_BLOCK.includes(a) || (USER_RO.includes(a) && m !== 'GET') || (a === 'kb' && p[2] === 'refresh'))) return send(res, 403, { error: 'Your role (User) cannot do this. Ask the account owner or an admin.', role: rl });
+      if (rl === 'viewer' && (USER_BLOCK.includes(a) || (m !== 'GET' && !(m === 'POST' && a === 'email-record')) || a === 'kb' && p[2] === 'refresh')) return send(res, 403, { error: 'Your role (View only) can look at records, print and email them, but cannot change anything. Ask the account owner.', role: rl }); /*VIEWONLY1*/
       if (rl === 'driver') { /*DRIVERROLE1 drivers: read trucks/assignments, run inspections, quick-log problems. Nothing else.*/
         const okD = (m === 'GET' && (a === 'state' || a === 'billing' || a === 'sig' || COLS.includes(a))) || (m === 'POST' && (a === 'inspections' || a === 'services') && !b);
         if (!okD) return send(res, 403, { error: 'Drivers can run inspections and log problems. Ask the account owner or an admin for anything else.', role: rl });
         if (a === 'state') { const bl0 = billing(db, user); if (!bl0.active) return send(res, 402, { error: 'trial_ended' }); const o = { ...db }; delete o.driverLink; delete o.sheetSync; delete o.billing; delete o.consents; delete o.quotes; return send(res, 200, o); } }
       if (a === 'team') return teamRoute(req, res, acct, user, b, p[3]);
-      if (rl === 'user' && a === 'state' && m === 'GET') { const bl0 = billing(db, user); if (!bl0.active) return send(res, 402, { error: 'trial_ended' }); const o = { ...db }; delete o.driverLink; delete o.sheetSync; delete o.billing; delete o.consents; return send(res, 200, o); } }
+      if ((rl === 'user' || rl === 'viewer') && a === 'state' && m === 'GET') { const bl0 = billing(db, user); if (!bl0.active) return send(res, 402, { error: 'trial_ended' }); const o = { ...db }; delete o.driverLink; delete o.sheetSync; delete o.billing; delete o.consents; return send(res, 200, o); } }
     if (OWNER_EMAIL && acct && String(acct.email || '').toLowerCase() === OWNER_EMAIL) OWNER_KEYS.add(user);
     if (a === 'billing' && b === 'consent' && m === 'POST') { /*LEGAL1 auto-renewal consent record (kept; never deleted)*/
       const o = await body(req), plan = PLANS.find(x => x.id === String(o.plan || '').toLowerCase()), cycle = o.cycle === 'yearly' ? 'yearly' : 'monthly';
