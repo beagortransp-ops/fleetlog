@@ -503,6 +503,7 @@ window.initSig = () => { const c = document.getElementById('sigpad'); if (!c || 
   c.onpointerdown = e => { d = true; c.setPointerCapture(e.pointerId); x.beginPath(); x.moveTo(...pt(e)); c.dataset.ink = 1; const h = c.nextElementSibling; if (h) h.style.display = 'none'; };
   c.onpointermove = e => { if (d) { x.lineTo(...pt(e)); x.stroke(); } }; c.onpointerup = () => d = false; };
 window.sigSave = () => { const c = document.getElementById('sigpad'); if (!c || !c.dataset.ink) return alert('Please sign first.'); saveProf('sig', c.toDataURL('image/png')); };
+window.mmrRowText = r => { if (!r) return { date: '', desc: '' }; const desc = [r.category, String(r.notes || '').replace(/\s*[\[(]?\s*sheet\s*row\s*#?\s*\d+\s*[\])]?/gi, '').replace(/\s{2,}/g, ' ').trim()].filter(Boolean).join(' — '); return { date: r.date ? fmtUS(r.date) : '', desc: desc }; };
 /*MMRCKINDEP each Yes/No is its own key; declaration toggles alone*/window.mmrCk = (K, k, v) => { const o = (window.mmrYN = window.mmrYN || {}); o[K] = Object.assign({}, o[K] || {}); o[K][k] = v; render(); };
 window.printAll = () => { try { fillPrintDate(); } catch (e) {} const pc = document.getElementById('sigpad'); let sig = ((db.profile || [])[0] || {}).sig; if (!sig && pc && pc.dataset.ink) { sig = pc.toDataURL('image/png'); saveProf('sig', sig); } const keep = window.mmrTruck, ym = window.mmrMonth; const pages = db.vehicles.map(v => { window.mmrTruck = v.id; const t = document.createElement('div'); t.innerHTML = VIEWS.mmr(); const f = t.querySelector('#mmrForm'); f.removeAttribute('id'); f.querySelectorAll('.sigw').forEach(x => x.innerHTML = '<img src="' + sig + '" class="sigi">'); f.querySelectorAll('canvas,.sigc,.sigh,button').forEach(x => x.remove()); /*SIGFIX*/ return '<div class="pg"><div class="mf">' + f.outerHTML + '</div></div>'; }); pages.forEach((p, i) => pages[i] = p.replace('Page 1 of 1', 'Page ' + (i + 1) + ' of ' + pages.length)); /*PGNO1*/ window.mmrTruck = keep; render();
   const css = [...document.querySelectorAll('style')].map(x => x.textContent).join('\n').replace(/@page\{[^}]*\}/g, '');
@@ -563,35 +564,55 @@ const VIEWS = {
     const today = fmtUS(n);
     const B = 'border:1px solid #333;background:#eaf0fb;min-height:16px;padding:1px 5px;font-size:11px';
     const f = (l, val, ce) => `<div><div style="font-weight:bold;font-size:10.5px;margin:0 0 2px 4px">${l}</div><div style="${B}" ${ce ? 'contenteditable="true"' + (typeof ce === 'string' ? ` title="Click to change" onblur="window.saveProf('${ce}', this.innerText.trim())"` : '') : ''}>${val || ''}</div></div>`;
-    const ck = c => `<span class="${c ? 'ckon' : 'ckb'}" style="display:inline-block;width:12px;height:12px;border:1px solid #333;background:#fff;vertical-align:middle;text-align:center;line-height:12px;font-size:10px">${c ? '✕' : ''}</span>`;
+    const ck = c => `<span class="mgba-cb">${c ? '✓' : ''}</span>`;
     const YK = v.id + '|' + ym, YO = (W.mmrYN = W.mmrYN || {})[YK] || {}; /*MMRV2 clickable yes/no*/
-    const yn = (q, y, k) => { if (k in YO) y = YO[k]; return `<div style="display:flex;align-items:center;margin:6px 0"><div style="flex:1">${q}</div><div style="width:150px;display:flex;gap:30px;cursor:pointer"><span onclick="mmrCk('${YK}','${k}',true)">${ck(y === true)} Yes</span><span onclick="mmrCk('${YK}','${k}',false)">${ck(y === false)} No</span></div></div>`; };
-    const td = 'border:1px solid #333;padding:1px 4px;height:15px';
-    const list = [...rows, ...Array(Math.max(0, 6 - rows.length)).fill(null)];
+    const ynv = (k, d) => (k in YO) ? YO[k] : d, rep = ynv('rep', true), oos = ynv('oos', false), decl = ynv('decl', true);
+    const list = [...rows, ...Array(Math.max(0, 5 - rows.length)).fill(null)].slice(0, 5); /*official MGBA-355 has 5 data rows*/
+    const myVal = esc(window.mmrMY != null ? window.mmrMY : ((()=>{try{return localStorage.getItem('mmrMY')}catch(e){return ''}})() || mname));
+    const signVal = esc(window.mmrName != null ? window.mmrName : ((()=>{try{return localStorage.getItem('mmrName')}catch(e){return null}})() ?? 'Sérgio da Costa'));
+    const hubVal = esc(((db.profile || [])[0] || {}).hub || ''), coVal = esc(((db.profile || [])[0] || {}).company || '');
     return `<div class="dsh mmrhd"><div class="hx"><div><div class="hxk">Monthly</div><h2>Monthly record</h2><span>${esc(v.truck || '')} · ${mname}</span></div><div class="hxr"><b>${money(tot)}</b><span>this month</span></div><div class="hxb"><i style="width:100%"></i></div></div>
     <div class="kp dkp">${[['Entries', rows.length, '#1a237e'], ['Total cost', money(tot), '#2e7d32'], ['Trucks', db.vehicles.length, '#5b2a86']].map(([k, vv, c]) => `<div class="ks" style="color:${c}"><b style="color:${c}">${vv}</b><span>${k}</span></div>`).join('')}</div></div><!--MMRPREM-->
     <div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:8px" id="mmrCtl"><label>Truck <select onchange="window.mmrTruck=this.value;render()">${db.vehicles.map(x => `<option value="${x.id}" ${x.id === v.id ? 'selected' : ''}>${esc(x.truck)}</option>`).join('')}</select></label><label>Month <input type="month" value="${ym}" onchange="window.mmrMonth=this.value;window.mmrMY=new Date(this.value+'-15').toLocaleString('en-US',{month:'long',year:'numeric'});try{localStorage.setItem('mmrMY',window.mmrMY)}catch(e){};render()"></label><button class="b s" onclick="recPrint('mmr')">Print / Save PDF</button><button class="b s" onclick="emailRec('mmr')"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>Email</button><button class="b s" onclick="emailAllMmr()"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>Email all trucks</button><button class="b" onclick="printAll()">Print all trucks (${db.vehicles.length})</button></div>
-    <div id="mmrForm" style="max-width:640px;background:#fff;color:#000;font-family:Arial,Helvetica,sans-serif;font-size:10.5px;line-height:1.3;padding:14px 18px;box-shadow:0 0 6px #0003">
-    <div style="border:1px solid #333;background:#ddd;text-align:center;font-weight:bold;font-size:14px;padding:3px">Monthly Maintenance Record</div><!--MMRMATCH2-->
-    <div style="text-align:right;font-weight:bold;font-size:9px;margin:3px 0">FL-MMR-1</div>
-    <p style="margin:0 0 8px">To comply with U.S. Federal Regulations, this form must be completed, signed, and submitted by the 20th of the month following the month for which repairs, or maintenance were performed on any service provider-owned or -leased equipment. Submit one record for each piece of equipment, even if not regularly providing services.</p>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 40px">
-    ${`<div><div style="font-weight:bold;font-size:10.5px;margin:0 0 2px 4px">Maintenance Record for the Month and Year of:</div><div style="${B}" contenteditable="true" title="Type once, fills every truck's record" onblur="window.mmrMY=this.innerText.trim();try{localStorage.setItem('mmrMY',window.mmrMY)}catch(e){}">${esc(window.mmrMY != null ? window.mmrMY : ((()=>{try{return localStorage.getItem('mmrMY')}catch(e){return ''}})() || mname))}</div></div>` /*MMRMYALL one month/year entry fills all monthly records*/}${f('Domicile Station/Hub:', esc(((db.profile || [])[0] || {}).hub || ''), 'hub')}
-    ${f('Service Provider Company Name:', esc(((db.profile || [])[0] || {}).company || ''), 'company')}${f('Current Mileage* (Odometer Reading):', '', true) /*MMRMILESBLANK user types current mileage*/}
-    ${f('Vehicle Unit #:', esc(v.truck || ''))}<div style="font-size:8px;padding-top:2px">*If reading has decreased due to odometer repair/replacement, proof should also be provided. If unit is undergoing repair and unavailable, "N/A" may be utilized for current mileage.</div></div>
-    ${yn('Were any repairs, or preventative maintenance performed on this unit?', true, 'rep') /*MMRREPYES default Yes*/}
-    ${yn('If "no" maintenance was performed, was the unit out of service and unable to provide service (i.e., awaiting repair, on litigation hold, etc.)?', false, 'oos')}
-    <p style="margin:6px 0 4px">All repairs/replacements, or maintenance performed in conformance with a vehicle's Maintenance Interval Form or any other major vehicle system must be reported on an MMR with detailed notations or attached receipts.</p>
-    <p style="margin:0 0 4px">All notations must provide enough detail for a DOT official to determine what component(s), location(s), and type of work was performed (e.g., replace, repair, adjust, etc.).</p>
-    <p style="margin:0 0 4px">Annual Federal/State and Pre/Post trip inspections must not be reported on the MMR, however repairs and maintenance of components that resulted from these inspections must be reported on an MMR.</p>
-    <p style="margin:0 0 6px">General maintenance (e.g., oil/filter changes, lubrication, adjustments) should be reported with adequate detail to clearly convey what components were repaired or maintained. Abbreviations such as "LOF" or "PM" cannot be used, as these do not provide adequate details.</p>
-    <table style="width:100%;border-collapse:collapse;font-size:10.5px"><tr><th style="${td};text-align:left;width:32%">Date of Maintenance</th><th style="${td};text-align:left">Specific Description of Maintenance Performed</th></tr>
-    ${list.map(r => `<tr><td style="${td}">${r ? fmtUS(r.date) : ''}</td><td style="${td}">${r ? esc([r.category /*MMRNOPARTS work done only, parts not listed*/, String(r.notes || '').replace(/\s*[\[(]?\s*sheet\s*row\s*#?\s*\d+\s*[\])]?/gi, '').replace(/\s{2,}/g, ' ').trim()].filter(Boolean).join(' — ')) /*NOSHEETROW display only*/ /*MONTHLYTRIM: per-row miles removed*/ : ''}</td></tr>`).join('')}</table>
-    
-    <div style="display:flex;gap:10px;margin:10px 0"><div style="cursor:pointer" onclick="mmrCk('${YK}','decl',!(YO.decl !== false))">${ck(YO.decl !== false) /*MMRDECLON*/ /*MMRUNCHK clickable*/}</div><div>By checking this box, I declare that this record is true and correct. Unless otherwise clearly indicated as "out of service" on this record, I confirm that the equipment on this record is in compliance with the Federal Motor Carrier Safety Regulations 49 C.F.R. 396.3(a)(1) and 396.7 (a) and is in safe operating condition and meets all federal, state and local motor vehicle laws. Furthermore, I confirm that preventative maintenance is consistent with the interval schedule per 396.3(b)(2).</div></div>
-    <div style="display:grid;grid-template-columns:3fr 2fr;gap:30px;align-items:end">${`<div><div style="font-weight:bold;font-size:10.5px;margin:0 0 2px 4px">Signature of Authorized Officer<br>or Business Contact:</div><div class="mmrPN" style="${B}" contenteditable="true" title="Type once, fills every truck's record" onblur="window.mmrName=this.innerText.trim();try{localStorage.setItem('mmrName',window.mmrName)}catch(e){}">${esc(window.mmrName != null ? window.mmrName : ((()=>{try{return localStorage.getItem('mmrName')}catch(e){return null}})() ?? 'Sérgio da Costa'))}</div></div>` /*MMRSIGNAME*/}${f('Date Completed:', '<span data-printdate>' + new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) + '</span>') /*MMRDATE = print date*/}</div>
-    <p style="font-style:italic;font-size:8.5px;margin:12px 0 4px">* The Monthly Maintenance Record (MMR) is a systematic method of obtaining vehicle maintenance records for service provider-owned vehicles in compliance with the Federal Motor Carrier Safety Regulations, which require motor carriers to have a systematic method of causing vehicles operating under their motor carrier operating authority to be repaired and maintained.</p>
-    <div style="border-top:1px solid #333;display:flex;justify-content:space-between;font-size:9px;padding-top:2px"><span></span><span class="pgno" data-pg="1">Page 1 of 1</span></div></div>`;
+    <div class="mgbaWrap" id="mgbaWrap"><div id="mmrForm" class="mgba355">
+    <div class="mgba-bar">U.S. Monthly Maintenance Record, MGBA-355</div>
+    <div class="mgba-rev">14 May 2025</div>
+    <p class="mgba-intro">To comply with U.S. Federal Regulations, this form must be completed, signed, and submitted to FedEx by the 20th of the<br>month following the month for which repairs, or maintenance were performed on any service provider-owned or<br>-leased equipment. Submit one record for each piece of equipment, even if not regularly providing services.</p>
+    <div class="mgba-lab gmy">Maintenance Record for the Month and Year of:</div>
+    <div class="mgba-box gmy" data-mmr="month" contenteditable="true" title="Type once, fills every truck's record" onblur="window.mmrMY=this.innerText.trim();try{localStorage.setItem('mmrMY',window.mmrMY)}catch(e){}">${myVal}</div>
+    <div class="mgba-lab ghub">Domicile Station/Hub:</div>
+    <div class="mgba-box ghub" data-mmr="hub" contenteditable="true" title="Click to change" onblur="window.saveProf('hub', this.innerText.trim())">${hubVal}</div>
+    <div class="mgba-lab gco">Service Provider Company Name:</div>
+    <div class="mgba-box gco" data-mmr="company" contenteditable="true" title="Click to change" onblur="window.saveProf('company', this.innerText.trim())">${coVal}</div>
+    <div class="mgba-lab gmi">Current Mileage* (Odometer Reading)</div>
+    <div class="mgba-box gmi" data-mmr="mileage" contenteditable="true" title="Type current mileage"></div>
+    <div class="mgba-lab gun">Vehicle Unit #:</div>
+    <div class="mgba-box gun" data-mmr="unit">${esc(v.truck || '')}</div>
+    <p class="mgba-note">*If reading has decreased due to odometer repair/replacement, proof<br>should also be provided. If unit is undergoing repair and unavailable,<br>“N/A” may be utilized for current mileage.</p>
+    <p class="mgba-q1">Were any repairs, or preventative maintenance performed on this unit?</p>
+    <div class="mgba-yn gy1" onclick="mmrCk('${YK}','rep',true)">${ck(rep === true)} Yes</div>
+    <div class="mgba-yn gn1" onclick="mmrCk('${YK}','rep',false)">${ck(rep === false)} No</div>
+    <p class="mgba-q2">If “no” maintenance was performed, was the unit out of service and unable to provide<br>service (i.e., awaiting repair, on litigation hold, etc.)?</p>
+    <div class="mgba-yn gy2" onclick="mmrCk('${YK}','oos',true)">${ck(oos === true)} Yes</div>
+    <div class="mgba-yn gn2" onclick="mmrCk('${YK}','oos',false)">${ck(oos === false)} No</div>
+    <p class="mgba-body gp1">All repairs/replacements, or maintenance performed in conformance with a vehicle’s Maintenance Interval Form or any<br>other major vehicle system must be reported on an MMR with detailed notations or attached receipts.</p>
+    <p class="mgba-body gp2">All notations must provide enough detail for a DOT official to determine what component(s), location(s), and type of work<br>was performed (e.g., replace, repair, adjust, etc.).</p>
+    <p class="mgba-body gp3">Annual Federal/State and Pre/Post trip inspections must not be reported on the MMR, however repairs and maintenance<br>of components that resulted from these inspections must be reported on an MMR.</p>
+    <p class="mgba-body gp4">General maintenance (e.g., oil/filter changes, lubrication, adjustments) should be reported with adequate detail to clearly<br>convey what components were repaired or maintained. Abbreviations such as “LOF” or “PM” cannot be used, as these do<br>not provide adequate details.</p>
+    <table class="mgba-table"><col class="gc1"><col><tr><th>Date of Maintenance</th><th>Specific Description of Maintenance Performed</th></tr>
+    ${list.map(r => { const t = mmrRowText(r); return `<tr><td>${r ? esc(t.date) : ''}</td><td>${r ? esc(t.desc) : ''}</td></tr>`; }).join('')}
+    </table>
+    <div class="mgba-decl-ck" onclick="mmrCk('${YK}','decl',!(YO.decl !== false))">${decl ? '✓' : ''}</div>
+    <p class="mgba-decl-tx">By checking this box, I declare that this record is true and correct. Unless otherwise clearly indicated as “out of<br>service” on this record, I confirm that the equipment on this record is in compliance with the Federal Motor Carrier<br>Safety Regulations 49 C.F.R. 396.3(a)(1) and 396.7 (a) and is in safe operating condition and meets all federal, state<br>and local motor vehicle laws. Furthermore, I confirm that preventative maintenance is consistent with the interval<br>schedule per 396.3(b)(2).</p>
+    <div class="mgba-slab gsig">Signature of Authorized Officer or Business Contact:</div>
+    <div class="mgba-slab gdt">Date Completed:</div>
+    <div class="mgba-sbox gsig"><div class="mmrPN" data-mmr="sign" contenteditable="true" title="Type once, fills every truck's record" onblur="window.mmrName=this.innerText.trim();try{localStorage.setItem('mmrName',window.mmrName)}catch(e){}">${signVal}</div></div>
+    <div class="mgba-sbox gdt" data-printdate>${new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}</div>
+    <p class="mgba-footn">* The Monthly Maintenance Record (MMR) is FedEx's systematic method of obtaining vehicle maintenance records for service<br>provider-owned vehicles in compliance with the Federal Motor Carrier Safety Regulations which require motor carriers to have a<br>systematic method of causing vehicles operating under their motor carrier operating authority to be repaired and maintained.<br>Therefore, if FedEx does not receive records for a vehicle by the 20th of the month following the month in which maintenance or<br>repairs, were performed, packages will not be made available to this vehicle.</p>
+    <div class="mgba-rule"></div>
+    <p class="mgba-footer">This form for service providers is accessed through mybizaccount.fedex.com</p>
+    <p class="mgba-page pgno" data-pg="1">Page 1 of 1</p>
+    </div></div>`;
   },
   insp() { /*INSPECT1*/
     const all = (db.inspections || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')), T = window.inspTruck || '';
@@ -966,7 +987,7 @@ window.recText = el => { const c = el.cloneNode(true); c.querySelectorAll('butto
   return t.split('\n').map(l => l.replace(/[ \t\u00a0]+/g, ' ').trim()).filter((l, i, a) => l || (a[i - 1] || '').trim()).join('\n').trim(); };
 window.emailRec = async kind => { const el = document.getElementById(kind === 'vir' ? 'virForm' : 'mmrForm'); if (!el) return;
   let box = document.getElementById('emBox'); if (box) { box.remove(); return; }
-  const name = kind === 'vir' ? 'Vehicle Inspection Record (FL-BIT-1)' : 'Monthly Maintenance Record (FL-MMR-1)';
+  const name = kind === 'vir' ? 'Vehicle Inspection Record (FL-BIT-1)' : 'U.S. Monthly Maintenance Record, MGBA-355';
   box = document.createElement('div'); box.id = 'emBox'; box.className = 'card'; box.setAttribute('style', 'margin:10px 0;padding:12px;border-left:4px solid #5b2a86;background:#fff');
   box.innerHTML = '<b style="color:#5b2a86">Email ' + esc(name) + '</b><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-top:8px"><label style="flex:1;min-width:200px">Send to<input id="emTo" type="text" list="emList" placeholder="name@example.com, other@example.com" autocomplete="email"></label><datalist id="emList"></datalist><div id="emPick" style="flex-basis:100%;display:flex;flex-wrap:wrap;gap:4px 12px;font-size:13px"></div><button class="b" style="width:auto;background:#e8742a;border-color:#e8742a" id="emGo">Send</button><button class="b s" style="width:auto" id="emX">Cancel</button></div><label style="display:block;margin-top:8px">Message (optional)<textarea id="emNote" rows="3" maxlength="4000" placeholder="Add a note to include in the email" style="width:100%;box-sizing:border-box;font:inherit"></textarea></label><div id="emMsg" style="font-size:13px;margin-top:6px;color:#556"></div>';
   el.parentNode.insertBefore(box, el); const msg = (t, bad) => { const m = box.querySelector('#emMsg'); m.style.color = bad ? '#c62828' : '#2e7d32'; m.textContent = t; };
@@ -977,7 +998,7 @@ window.emailRec = async kind => { const el = document.getElementById(kind === 'v
   box.querySelector('#emGo').onclick = async () => { const toL = [...new Set([...[...box.querySelectorAll('.emPk:checked')].map(c => c.value), ...box.querySelector('#emTo').value.split(/[,;\s]+/)].map(x => x.trim().toLowerCase()).filter(Boolean))], bad = toL.filter(x => !/^[^\s@,<>]+@[^\s@,<>]+\.[^\s@,<>]+$/.test(x)); /*MULTITO1*/
     if (!toL.length) return msg('Pick or enter at least one email address.', 1); if (bad.length) return msg('Not a valid email: ' + bad.join(', '), 1); if (toL.length > 10) return msg('Up to 10 recipients per email.', 1); const to = toL.join(',');
     const vid = kind === 'vir' ? (window.VIRCUR || {}).vehicleId : (window.mmrTruck || ((el.closest('#app') || document).querySelector('select') || {}).value), vv = (db.vehicles || []).find(x => x.id === vid), truck = vv && vv.truck ? ' - ' + vv.truck : '';
-    const subject = 'FleetLog ' + name + truck, d = new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10), filename = ('FleetLog-' + (kind === 'vir' ? 'FL-BIT-1' : 'FL-MMR-1') + truck.replace(/[^\w]+/g, '-') + '-' + d + '.pdf').replace(/-+/g, '-');
+    const subject = 'FleetLog ' + name + truck, d = new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10), filename = ('FleetLog-' + (kind === 'vir' ? 'FL-BIT-1' : 'MGBA-355') + truck.replace(/[^\w]+/g, '-') + '-' + d + '.pdf').replace(/-+/g, '-');
     const note = 'Attached: ' + name + truck + ' (PDF).', um = box.querySelector('#emNote').value.trim(), noteM = um ? um + '\n\n' + note : note; /*EMAILMSG1*/
     const go = box.querySelector('#emGo'); go.disabled = true; msg('Making the PDF...');
     let blob; try { blob = await recPdf(el); } catch (e) { go.disabled = false; return msg('Could not make the PDF. Use Print / Save PDF instead.', 1); }
@@ -1003,7 +1024,7 @@ window.BULKMMR = { scale: 2, q: 0.8, maxRaw: 17e6 };
 window.emailAllMmr = async () => { if (!document.getElementById('mmrForm')) return;
   let box = document.getElementById('emAllBox'); if (box) { if (!box.dataset.busy) box.remove(); return; }
   const vs = (db.vehicles || []).filter(v => !v.example), ym = window.mmrMonth || '', mlabel = ym ? new Date(ym + '-15').toLocaleString('en-US', { month: 'long', year: 'numeric' }) : '';
-  const name = 'Monthly Maintenance Record (FL-MMR-1)';
+  const name = 'U.S. Monthly Maintenance Record, MGBA-355';
   box = document.createElement('div'); box.id = 'emAllBox'; box.className = 'card'; box.setAttribute('style', 'position:fixed;left:50%;top:80px;transform:translateX(-50%);z-index:9999;width:min(520px,calc(100vw - 24px));box-sizing:border-box;margin:0;padding:14px;border-left:4px solid #5b2a86;background:#fff;box-shadow:0 10px 40px #0005');
   box.innerHTML = '<b style="color:#5b2a86">Email all trucks: ' + esc(name) + '</b><div style="font-size:13px;color:#556;margin-top:4px">' + vs.length + ' trucks · ' + esc(mlabel) + ' · one email, one PDF per truck</div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-top:8px"><label style="flex:1;min-width:200px">Send to<input id="emAllTo" type="text" list="emAllList" placeholder="name@example.com, other@example.com" autocomplete="email"></label><datalist id="emAllList"></datalist><div id="emAllPick" style="flex-basis:100%;display:flex;flex-wrap:wrap;gap:4px 12px;font-size:13px"></div><button class="b" style="width:auto;background:#e8742a;border-color:#e8742a" id="emAllGo">Send</button><button class="b s" style="width:auto" id="emAllX">Cancel</button></div><label style="display:block;margin-top:8px">Message (optional)<textarea id="emAllNote" rows="3" maxlength="4000" placeholder="Add a note to include in the email" style="width:100%;box-sizing:border-box;font:inherit"></textarea></label><div id="emAllMsg" style="font-size:13px;margin-top:6px;color:#556"></div>';
   document.body.appendChild(box); const msg = (t, bad) => { const m = box.querySelector('#emAllMsg'); m.style.color = bad ? '#c62828' : bad === 0 ? '#556' : '#2e7d32'; m.textContent = t; };
@@ -1022,7 +1043,7 @@ window.emailAllMmr = async () => { if (!document.getElementById('mmrForm')) retu
     try { for (let i = 0; i < vs.length; i++) { const v = vs[i]; msg('Building ' + (i + 1) + ' of ' + vs.length + '…', 0);
         window.mmrTruck = v.id; render(); await new Promise(r => setTimeout(r, 30)); const f = document.getElementById('mmrForm'); if (!f) throw new Error('form');
         const blob = await recPdf(f, { scale: BULKMMR.scale, q: BULKMMR.q }), truck = v.truck ? ' - ' + v.truck : '';
-        let fn = ('FleetLog-FL-MMR-1' + truck.replace(/[^\w]+/g, '-') + '-' + d + '.pdf').replace(/-+/g, '-'); for (let k = 2; used.has(fn); k++) fn = fn.replace(/(-n\d+)?\.pdf$/, '-n' + k + '.pdf'); used.add(fn);
+        let fn = ('FleetLog-MGBA-355' + truck.replace(/[^\w]+/g, '-') + '-' + d + '.pdf').replace(/-+/g, '-'); for (let k = 2; used.has(fn); k++) fn = fn.replace(/(-n\d+)?\.pdf$/, '-n' + k + '.pdf'); used.add(fn);
         const b64 = await new Promise((ok, no) => { const fr = new FileReader(); fr.onload = () => ok(String(fr.result).split(',')[1]); fr.onerror = no; fr.readAsDataURL(blob); });
         atts.push({ filename: fn, pdf: b64, size: blob.size, truck: v.truck || '' }); } }
     catch (e) { window.mmrTruck = keep; render(); busy(false); return msg('Could not make the PDFs (' + (atts.length + 1) + ' of ' + vs.length + '). Nothing was sent.', 1); }
@@ -1036,6 +1057,138 @@ window.emailAllMmr = async () => { if (!document.getElementById('mmrForm')) retu
       sent += P.list.length; from = r.from || from; }
     busy(false); go.textContent = 'Done'; go.onclick = () => box.remove(); cx.textContent = 'Close';
     msg('Sent ' + sent + ' records to ' + to + ' from ' + (from || 'FleetLog') + (parts.length > 1 ? ' in ' + parts.length + ' emails' : '') + '.'); };
+};
+/*MGBA355 fill the official FedEx U.S. Monthly Maintenance Record, MGBA-355 AcroForm for Print / Email / Print all*/
+window.mmrRowText = r => {
+  if (!r) return { date: '', desc: '' };
+  const desc = [r.category, String(r.notes || '').replace(/\s*[\[(]?\s*sheet\s*row\s*#?\s*\d+\s*[\])]?/gi, '').replace(/\s{2,}/g, ' ').trim()].filter(Boolean).join(' — ');
+  return { date: r.date ? fmtUS(r.date) : '', desc: desc };
+};
+window.mmrCollect = vid => {
+  const W = window, n = new Date();
+  const v = db.vehicles.find(x => x.id === (vid || W.mmrTruck)) || {};
+  const ym = W.mmrMonth || (n.toISOString() || '').slice(0, 7);
+  const rows = [...db.services, ...(db.parts || []).filter(p => !/^From service:/.test(p.notes || '')).map(p => ({ ...p, category: [p.type, p.position].filter(Boolean).join(' '), parts: p.brand || '' }))]
+    .filter(s => s.vehicleId === v.id && String(s.date || '').startsWith(ym) && !(/DVIR/i.test(s.category || '') && s.needsDetails))
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const mname = new Date(ym + '-15').toLocaleString('en-US', { month: 'long', year: 'numeric' });
+  const form = document.getElementById('mmrForm');
+  const isCur = !vid || vid === W.mmrTruck;
+  const txt = (sel, fb) => {
+    const el = (isCur && form) ? form.querySelector(sel) : null;
+    const t = el && (el.innerText || el.textContent || '').trim();
+    return t || fb;
+  };
+  let my = W.mmrMY != null ? W.mmrMY : '';
+  if (!my) try { my = localStorage.getItem('mmrMY') || ''; } catch (e) {}
+  let nm = W.mmrName != null ? W.mmrName : null;
+  if (nm == null) try { nm = localStorage.getItem('mmrName'); } catch (e) { nm = null; }
+  if (nm == null) nm = 'Sérgio da Costa';
+  const YK = v.id + '|' + ym, YO = (W.mmrYN = W.mmrYN || {})[YK] || {};
+  const prof = (db.profile || [])[0] || {};
+  let sig = prof.sig;
+  const pc = document.getElementById('sigpad');
+  if (!sig && pc && pc.dataset.ink) try { sig = pc.toDataURL('image/png'); } catch (e) {}
+  return {
+    vehicleId: v.id, truck: v.truck || '', ym, monthYear: txt('[data-mmr=month]', my || mname),
+    hub: txt('[data-mmr=hub]', prof.hub || ''), company: txt('[data-mmr=company]', prof.company || ''),
+    mileage: isCur ? txt('[data-mmr=mileage]', '') : '',
+    unit: v.truck || '',
+    rep: ('rep' in YO) ? YO.rep : true, oos: ('oos' in YO) ? YO.oos : false, decl: YO.decl !== false,
+    rows: rows.map(mmrRowText),
+    sigName: txt('[data-mmr=sign]', nm), sigImg: sig || '',
+    dateCompleted: (form && isCur && form.querySelector('[data-printdate]') && form.querySelector('[data-printdate]').textContent) || new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })
+  };
+};
+window.mmrOfficialPdf = async data => {
+  await loadJs('/vendor/pdf-lib.min.js');
+  if (!window.__mgbaTpl) window.__mgbaTpl = await fetch('/forms/MGBA-355_US_MMR.pdf').then(r => { if (!r.ok) throw new Error('MGBA-355 template missing'); return r.arrayBuffer(); });
+  if (!window.__mgbaFont) try { window.__mgbaFont = await fetch('/fonts/GreatVibes-Regular.ttf').then(r => r.ok ? r.arrayBuffer() : null); } catch (e) { window.__mgbaFont = null; }
+  const { PDFDocument, StandardFonts, rgb } = PDFLib;
+  const rows = (data && data.rows) || [];
+  const nPages = Math.max(1, Math.ceil((rows.length || 1) / 5));
+  const out = await PDFDocument.create();
+  for (let i = 0; i < nPages; i++) {
+    const src = await PDFDocument.load(window.__mgbaTpl.slice(0));
+    const form = src.getForm();
+    const set = (n, v, sz) => { try { const f = form.getTextField(n); if (sz) f.setFontSize(sz); f.setText(v == null ? '' : String(v)); } catch (e) {} };
+    const ck = (n, on) => { try { const c = form.getCheckBox(n); on ? c.check() : c.uncheck(); } catch (e) {} };
+    set('Maintenance Record for the Month and Year of', data.monthYear, 10);
+    set('Domicile StationHub', data.hub, 10);
+    set('Service Provider Company Name', data.company, 10);
+    set('Current Mileage Odometer Reading', data.mileage, 10);
+    set('Vehicle Unit', data.unit, 10);
+    const chunk = rows.slice(i * 5, i * 5 + 5);
+    for (let j = 0; j < 5; j++) {
+      const r = chunk[j] || { date: '', desc: '' };
+      set('Date of MaintenanceRow' + (j + 1), r.date, 10);
+      set('Specific Description of Maintenance PerformedRow' + (j + 1), r.desc, 10);
+    }
+    ck('Check Box3', data.rep === true);
+    ck('Check Box1', data.rep === false);
+    ck('Check Box4', data.oos === true);
+    ck('Check Box2', data.oos === false);
+    ck('Check Box5', data.decl !== false);
+    set('Date Completed', data.dateCompleted, 11);
+    const page = src.getPages()[0];
+    try { form.updateFieldAppearances(); } catch (e) {}
+    try { form.flatten(); } catch (e) {}
+    const box = { x: 37.2, y: 124.92, width: 307.92, height: 26.88 };
+    try {
+      if (data.sigName) {
+        await document.fonts.load('20pt "Great Vibes"').catch(() => {});
+        const scale = 3, cssW = box.width * 96 / 72, cssH = box.height * 96 / 72;
+        const c = document.createElement('canvas');
+        c.width = Math.ceil(cssW * scale); c.height = Math.ceil(cssH * scale);
+        const ctx = c.getContext('2d');
+        ctx.scale(scale, scale);
+        ctx.clearRect(0, 0, cssW, cssH);
+        ctx.font = '20pt "Great Vibes", "Brush Script MT", "Snell Roundhand", cursive';
+        ctx.fillStyle = 'rgb(11, 31, 92)';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(data.sigName), 4, cssH / 2);
+        const u8 = Uint8Array.from(atob(c.toDataURL('image/png').split('base64,')[1]), ch => ch.charCodeAt(0));
+        const img = await src.embedPng(u8);
+        page.drawImage(img, { x: box.x, y: box.y, width: box.width, height: box.height });
+      } else if (data.sigImg) {
+        const raw = data.sigImg;
+        const bin = raw.indexOf('base64,') >= 0 ? raw.split('base64,')[1] : raw;
+        const u8 = Uint8Array.from(atob(bin), ch => ch.charCodeAt(0));
+        const img = raw.indexOf('image/jpeg') >= 0 ? await src.embedJpg(u8) : await src.embedPng(u8);
+        const sc = Math.min(box.width / img.width, (box.height - 2) / img.height);
+        const w = img.width * sc, h = img.height * sc;
+        page.drawImage(img, { x: box.x + 2, y: box.y + (box.height - h) / 2, width: w, height: h });
+      }
+    } catch (e) {}
+    const [p] = await out.copyPages(src, [0]);
+    out.addPage(p);
+  }
+  const bytes = await out.save();
+  return new Blob([bytes], { type: 'application/pdf' });
+};
+
+window.printAll = async () => { /*MGBA355 official multi-truck PDF*/
+  try { fillPrintDate(); } catch (e) {}
+  const keep = window.mmrTruck, say = t => { try { toast(t); } catch (e) {} };
+  let tab = null; try { tab = window.open('', '_blank'); if (tab) tab.document.write('<title>FleetLog MGBA-355</title><p style="font:18px system-ui,sans-serif;padding:24px">Making the official MGBA-355 PDFs…</p>'); } catch (e) {}
+  try {
+    await loadJs('/vendor/pdf-lib.min.js');
+    const { PDFDocument } = PDFLib, out = await PDFDocument.create();
+    const vs = db.vehicles || [];
+    for (const v of vs) {
+      const blob = await mmrOfficialPdf(mmrCollect(v.id));
+      const src = await PDFDocument.load(await blob.arrayBuffer());
+      (await out.copyPages(src, src.getPageIndices())).forEach(p => out.addPage(p));
+    }
+    const bytes = await out.save(), url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+    setTimeout(() => URL.revokeObjectURL(url), 300000);
+    if (tab && !tab.closed) { try { tab.location.href = url; } catch (e) { window.open(url, '_blank'); } }
+    else { const w = window.open(url, '_blank'); if (!w) { const a = document.createElement('a'); a.href = url; a.download = 'FleetLog-MGBA-355-all.pdf'; a.click(); } }
+    say('Official MGBA-355 PDF opened for ' + vs.length + ' trucks.');
+  } catch (e) {
+    if (tab) try { tab.close(); } catch (x) {}
+    say('Could not make the official MGBA-355 PDFs.');
+  }
 };
 </script><script>/*EMAILPDF1 PDF of the on-screen form (vendored html2canvas + jsPDF, loaded on demand)*/
 window.loadJs = src => new Promise((ok, no) => { if (document.querySelector('script[src="' + src + '"]')) return ok(); const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = no; document.head.appendChild(s); });
@@ -1064,7 +1217,7 @@ window.recCanvas = async (el, o) => { /*BULKMMR1 o.scale: lower resolution for E
     sp.style.height = d.offsetHeight ? d.offsetHeight + 'px' : cs.height; sp.style.lineHeight = (e.tagName === 'TEXTAREA' ? cs.lineHeight : Math.max(1, (d.offsetHeight || 16) - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - parseFloat(cs.borderTopWidth) - parseFloat(cs.borderBottomWidth)) + 'px');
     sp.style.display = cs.display === 'block' || cs.display === 'flex' ? 'block' : 'inline-block'; if (ce.id === 'virForm' && sp.style.display === 'inline-block' && (!cs.verticalAlign || cs.verticalAlign === 'baseline')) sp.style.verticalAlign = 'bottom'; /*VIRMATCH1 clipped inline-block sits on its bottom edge and made every row 2px taller than on screen*/ sp.style.overflow = 'hidden'; sp.style.whiteSpace = e.tagName === 'TEXTAREA' ? 'pre-wrap' : 'nowrap'; reps.push([d, sp]); }); reps.forEach(([d, sp]) => d.replaceWith(sp)); if (ce.id === 'virForm') { ce.querySelectorAll('*').forEach(n => { n.style.borderRadius = '0'; }); try { vrCollapse(ce, doc); } catch (e) {} } /*VIRSQUARE1 PDF/print: square corners like the screen (collapsed table cells show square on screen; html2canvas drew them rounded)*/ if (ce.id === 'mmrForm') { const th0 = ce.querySelector('table th'); if (th0 && ce.scrollHeight > 960) th0.style.width = '20%'; const fz = [...ce.querySelectorAll('[style*="font-size"]')].map(n => [n, parseFloat(n.style.fontSize)]), base = parseFloat(ce.style.fontSize) || 12.6; for (let k = 0.95; ce.scrollHeight > 960 && k >= 0.7; k -= 0.05) { ce.style.fontSize = (base * k) + 'px'; fz.forEach(([n, v]) => { if (v) n.style.fontSize = (v * k) + 'px'; }); } /*MMRMATCH2 long months: tighten type before shrinking the page*/ } if (ce.id === 'mmrForm') { const t = ce.querySelector('table'); if (t) { t.style.flex = '0 0 auto'; t.style.height = 'auto'; } ce.style.minHeight = '960px'; } /*MMRPRINT1 do not stretch date/description rows to fill the page*/ } }); }
   finally { host.remove(); } };
-window.recPdf = async (el, o) => { const c = await recCanvas(el, o); await loadJs('/vendor/jspdf.umd.min.js');
+window.recPdf = async (el, o) => { if (el && el.id === 'mmrForm') return mmrOfficialPdf(mmrCollect()); const c = await recCanvas(el, o); await loadJs('/vendor/jspdf.umd.min.js');
   const pdf = new jspdf.jsPDF({ unit: 'pt', format: 'letter', orientation: 'portrait', compress: true }); try { pdf.setFileId('F1EE7106F1EE7106F1EE7106F1EE7106'); const t = new Date(); t.setHours(0, 0, 0, 0); pdf.setCreationDate(t); pdf.setProperties({ title: el.id === 'virForm' ? 'Vehicle Inspection & Maintenance Record FL-BIT-1' : 'Monthly Maintenance Record FL-MMR-1', creator: 'FleetLog' }); } catch (e) {} /*PRINTPDF1 same bytes for Print and Email*/
   const pw = 612, ph = 792, m = c.width / c.height >= 0.74 && c.width / c.height <= 0.76 ? 36 : 22, aw = pw - 2 * m, ah = ph - 2 * m; let w = aw, h = c.height * aw / c.width; if (h > ah) { w = w * ah / h; h = ah; }
   pdf.addImage(c.toDataURL('image/jpeg', (o && o.q) || 0.92), 'JPEG', (pw - w) / 2, m, w, h);
@@ -1076,7 +1229,7 @@ window.recPrint = async kind => { /*PRINTPDF1 Print = the exact same one-page PD
   let tab = null; try { tab = window.open('', '_blank'); if (tab) tab.document.write('<title>FleetLog PDF</title><p style="font:18px system-ui,sans-serif;padding:24px">Making the PDF…</p>'); } catch (e) { tab = null; }
   let blob; try { blob = await recPdf(el); } catch (e) { if (tab) try { tab.close(); } catch (x) {} return kind === 'vir' ? virPrint() : doPrint(false); }
   const url = URL.createObjectURL(blob); window.__recPdf = blob; setTimeout(() => URL.revokeObjectURL(url), 300000);
-  const name = 'FleetLog-' + (kind === 'vir' ? 'FL-BIT-1' : 'FL-MMR-1') + '.pdf', say = t => { try { toast(t); } catch (e) {} };
+  const name = 'FleetLog-' + (kind === 'vir' ? 'FL-BIT-1' : 'MGBA-355') + '.pdf', say = t => { try { toast(t); } catch (e) {} };
   const opened = () => say(touch ? 'PDF opened in a new tab: tap Share > Print.' : 'PDF opened in a new tab: press the printer icon (or Share > Print on phone).');
   const dl = () => { const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); say('PDF downloaded. Open it and print.'); };
   if (tab && !tab.closed) { try { tab.location.href = url; return opened(); } catch (e) { try { tab.close(); } catch (x) {} } }
@@ -1170,4 +1323,75 @@ html body #app>#mmrForm table,html body #mmrForm table{flex:0 0 auto!important;h
 html body #app>#mmrForm table th,html body #mmrForm table th{height:auto!important;padding:1px 4px!important;font-size:12px!important;line-height:1.3!important}
 html body #app>#mmrForm table td,html body #mmrForm table td{height:15px!important;padding:1px 4px!important;font-size:10.5px!important;line-height:1.3!important}
 }
+</style>
+<style>
+/*MGBA355 official U.S. Monthly Maintenance Record, MGBA-355 layout (letter 612x792pt). Positions measured from FedEx AcroForm PDF (May 14 2025).*/
+@font-face{font-family:'Great Vibes';src:url('/fonts/GreatVibes-Regular.ttf') format('truetype');font-weight:400;font-style:normal}#mmrForm.mgba355{width:612pt;height:792pt;position:relative;background:#fff;color:#000;font-family:Arial,Helvetica,sans-serif;font-size:9.96pt;line-height:1.157;box-sizing:border-box;overflow:hidden;box-shadow:0 0 6px #0003;margin:0 auto;padding:0}
+#mmrForm.mgba355 *{box-sizing:border-box}
+#mmrForm.mgba355 .mgba-bar{position:absolute;left:30.6pt;top:43.08pt;width:550.8pt;height:23.28pt;background:#d9d9d9;border:0.96pt solid #000;display:flex;align-items:center;justify-content:center;font-family:Arial,Helvetica,sans-serif;font-weight:700;font-size:15.96pt;line-height:1;color:#000;letter-spacing:0.015em;text-align:center}
+#mmrForm.mgba355 .mgba-rev{position:absolute;left:480pt;top:72.84pt;width:96pt;text-align:right;font-family:Arial,Helvetica,sans-serif;font-weight:700;font-size:9pt;line-height:1;color:#000}
+#mmrForm.mgba355 .mgba-intro{position:absolute;left:36pt;top:89.16pt;width:540pt;margin:0;font-family:Arial,Helvetica,sans-serif;font-weight:400;font-size:9.96pt;line-height:11.52pt;color:#000}
+#mmrForm.mgba355 .mgba-lab{position:absolute;font-family:Arial,Helvetica,sans-serif;font-weight:700;font-size:9.96pt!important;line-height:1;color:#000!important;white-space:nowrap;background:transparent!important;border:0!important;border-radius:0!important;min-height:0!important;padding:0!important;text-align:left!important}
+#mmrForm.mgba355 .mgba-lab.gmy{left:41.4pt;top:138.12pt}
+#mmrForm.mgba355 .mgba-lab.ghub{left:320.4pt;top:138.12pt}
+#mmrForm.mgba355 .mgba-lab.gco{left:41.4pt;top:175.68pt}
+#mmrForm.mgba355 .mgba-lab.gmi{left:320.4pt;top:175.68pt}
+#mmrForm.mgba355 .mgba-lab.gun{left:41.4pt;top:213.24pt}
+#mmrForm.mgba355 .mgba-box{position:absolute;border:0.48pt solid #000!important;border-radius:0!important;background:#fff!important;font-family:Arial,Helvetica,sans-serif;font-weight:400;font-size:10pt!important;line-height:13pt;padding:0 3pt!important;color:#000!important;outline:0;overflow:hidden;white-space:nowrap;min-height:0!important;text-align:left!important}
+#mmrForm.mgba355 .mgba-box.gmy{left:36.72pt;top:153.36pt;width:237.24pt;height:13.92pt}
+#mmrForm.mgba355 .mgba-box.ghub{left:315.72pt;top:153.36pt;width:259.68pt;height:13.92pt}
+#mmrForm.mgba355 .mgba-box.gco{left:36.72pt;top:190.92pt;width:237.24pt;height:13.92pt}
+#mmrForm.mgba355 .mgba-box.gmi{left:315.72pt;top:190.92pt;width:259.68pt;height:13.92pt}
+#mmrForm.mgba355 .mgba-box.gun{left:36.84pt;top:228.6pt;width:237pt;height:15pt}
+#mmrForm.mgba355 .mgba-note{position:absolute;left:320.4pt;top:211.08pt;width:255.6pt;margin:0!important;padding:0!important;font-family:Arial,Helvetica,sans-serif;font-style:italic;font-weight:400;font-size:8.04pt!important;line-height:9.24pt;color:#000!important;background:transparent!important;border:0!important;border-radius:0!important;min-height:0!important}
+#mmrForm.mgba355 .mgba-q1{position:absolute;left:41.4pt;top:254.88pt;width:390pt;margin:0;font-size:9.96pt;line-height:13.56pt}
+#mmrForm.mgba355 .mgba-q2{position:absolute;left:41.4pt;top:283.56pt;width:390pt;margin:0;font-size:9.96pt;line-height:11.52pt}
+#mmrForm.mgba355 .mgba-yn{position:absolute;font-size:9.96pt;line-height:13.56pt;display:flex;align-items:center;gap:0;cursor:pointer}
+#mmrForm.mgba355 .mgba-yn.gy1{left:445.56pt;top:254.88pt}
+#mmrForm.mgba355 .mgba-yn.gn1{left:517.56pt;top:254.88pt}
+#mmrForm.mgba355 .mgba-yn.gy2{left:445.56pt;top:289.4pt}
+#mmrForm.mgba355 .mgba-yn.gn2{left:517.56pt;top:289.4pt}
+#mmrForm.mgba355 .mgba-cb{display:inline-block;width:18pt;height:18pt;border:0.8pt solid #000;background:#fff;margin-right:4pt;text-align:center;line-height:16pt;font-size:13pt;font-weight:700;color:#000;vertical-align:middle;flex:none}
+#mmrForm.mgba355 .mgba-body{position:absolute;left:36pt;width:540pt;margin:0;font-size:9.96pt;line-height:11.52pt;font-weight:400}
+#mmrForm.mgba355 .mgba-body.gp1{top:329.4pt}
+#mmrForm.mgba355 .mgba-body.gp2{top:352.44pt}
+#mmrForm.mgba355 .mgba-body.gp3{top:375.48pt}
+#mmrForm.mgba355 .mgba-body.gp4{top:398.52pt}
+#mmrForm.mgba355 .mgba-table{position:absolute;left:35.76pt;top:449.16pt;width:545.04pt;border-collapse:collapse;table-layout:fixed;font-size:11.04pt}
+#mmrForm.mgba355 .mgba-table th,#mmrForm.mgba355 .mgba-table td{border:0.6pt solid #000;padding:0 4pt;font-family:Arial,Helvetica,sans-serif;color:#000;text-align:center;overflow:hidden}
+#mmrForm.mgba355 .mgba-table th{font-weight:700;font-size:11.04pt;height:13.56pt;text-align:left;padding-left:5pt}
+#mmrForm.mgba355 .mgba-table td{font-weight:400;font-size:10pt;height:15.12pt;line-height:14pt}
+#mmrForm.mgba355 .mgba-table .gc1{width:131.28pt}
+#mmrForm.mgba355 .mgba-decl-ck{position:absolute;left:32.67pt;top:552.64pt;width:18pt;height:18pt;border:0.8pt solid #000;background:#fff;text-align:center;line-height:16pt;font-size:13pt;font-weight:700;cursor:pointer;color:#000}
+#mmrForm.mgba355 .mgba-decl-tx{position:absolute;left:56pt;top:548.2pt;width:520pt;margin:0;font-size:9.96pt;line-height:11.52pt}
+#mmrForm.mgba355 .mgba-slab{position:absolute;font-family:Arial,Helvetica,sans-serif;font-weight:700;font-size:11.04pt;line-height:1;color:#000}
+#mmrForm.mgba355 .mgba-slab.gsig{left:41.4pt;top:623.28pt}
+#mmrForm.mgba355 .mgba-slab.gdt{left:401.04pt;top:623.28pt}
+#mmrForm.mgba355 .mgba-sbox{position:absolute;border:0.48pt solid #000;background:#fff;overflow:hidden}
+#mmrForm.mgba355 .mgba-sbox.gsig{left:36.72pt;top:640.2pt;width:308.4pt;height:26.88pt}
+#mmrForm.mgba355 .mgba-sbox.gdt{left:396.84pt;top:640.2pt;width:177.6pt;height:26.88pt;font-size:11pt!important;line-height:14pt;padding:4pt 4pt 0!important}
+#mmrForm.mgba355 .mgba-sbox.gsig .mmrPN{font-family:'Great Vibes','Brush Script MT','Snell Roundhand',cursive;font-size:20pt;line-height:26pt;color:#0b1f5c;padding:0 6pt;height:100%;white-space:nowrap}
+#mmrForm.mgba355 .mgba-footn{position:absolute;left:36pt;top:680.16pt;width:540pt;margin:0;font-family:Calibri,'Calibri Italic',Arial,Helvetica,sans-serif;font-style:italic;font-weight:400;font-size:9.96pt;line-height:12.24pt;color:#000}
+#mmrForm.mgba355 .mgba-rule{position:absolute;left:34.56pt;top:757.68pt;width:542.88pt;height:0.48pt;background:#000}
+#mmrForm.mgba355 .mgba-footer{position:absolute;left:36pt;top:759.12pt;width:400pt;margin:0;font-family:Arial,Helvetica,sans-serif;font-weight:400;font-size:9pt;line-height:12.28pt;color:#000}
+#mmrForm.mgba355 .mgba-page{position:absolute;right:36pt;top:759.12pt;margin:0;font-family:Arial,Helvetica,sans-serif;font-weight:400;font-size:9pt;line-height:12.28pt;color:#000}
+.mgbaWrap{width:100%;overflow:auto;-webkit-overflow-scrolling:touch}
+@media print{
+@page{size:letter;margin:0}
+html,body,#app{background:#fff!important;margin:0!important;padding:0!important;width:auto!important;height:auto!important;overflow:visible!important}
+body *{visibility:hidden!important}
+html body #app>.mgbaWrap,html body #app>.mgbaWrap *,html body #mmrForm.mgba355,html body #mmrForm.mgba355 *{visibility:visible!important}
+html body #app>:not(.mgbaWrap){display:none!important}
+html body #app #mgbaWrap#mgbaWrap{display:block!important;visibility:visible!important;position:static!important;width:auto!important;margin:0!important;padding:0!important;overflow:visible!important;background:#fff!important}
+html body #app .mgbaWrap #mmrForm.mgba355,html body #mmrForm.mgba355{position:relative!important;left:0!important;top:0!important;width:612pt!important;height:792pt!important;max-width:612pt!important;min-width:0!important;min-height:0!important;max-height:792pt!important;margin:0 auto!important;padding:0!important;box-shadow:none!important;display:block!important;flex:none!important;overflow:hidden!important;font-size:9.96pt!important;line-height:1.157!important;background:#fff!important;zoom:1!important}
+html body #mmrForm.mgba355 *{max-width:none!important;color:inherit}
+html body #app .mgbaWrap #mmrForm.mgba355 table,html body #mmrForm.mgba355 table{flex:none!important;height:auto!important;width:545.04pt!important;font-size:11.04pt!important;margin:0!important}
+html body #mmrForm.mgba355 table th{height:13.56pt!important;padding:0 4pt 0 5pt!important;font-size:11.04pt!important;line-height:1!important}
+html body #mmrForm.mgba355 table td{height:15.12pt!important;padding:0 4pt!important;font-size:10pt!important;line-height:14pt!important}
+html body #mmrForm.mgba355 p{margin:0!important}
+html body #mmrForm.mgba355 .mgba-bar{font-size:15.96pt!important}
+html body #mmrForm.mgba355 .mgba-note{font-size:8.04pt!important;border:0!important;background:transparent!important}
+#mmrCtl,.mmrhd,header,#nav,#trialBar,#payBox,.supmail,#legalFoot,#hdrR,#prHelp{display:none!important}
+}
+
 </style></body></html>
