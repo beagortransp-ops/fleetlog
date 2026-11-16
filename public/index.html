@@ -1160,6 +1160,33 @@ window.mmrOfficialPdf = async data => {
         page.drawImage(img, { x: box.x + 2, y: box.y + (box.height - h) / 2, width: w, height: h });
       }
     } catch (e) {}
+    try {
+      /* MGBAFOOT1: under-signature block only. Scale footnote 9.96→8.47 and footer 9→7.65 (×0.85). Compact leading 12.24→9.48 and 12.28→9.5. Wording and structure unchanged. Do not touch the signature. */
+      const white = rgb(1, 1, 1);
+      page.drawRectangle({ x: 30, y: 6, width: 554, height: 118, color: white });
+      const fnFont = await src.embedFont(StandardFonts.HelveticaOblique);
+      const ftFont = await src.embedFont(StandardFonts.Helvetica);
+      const fnLines = [
+        '* The Monthly Maintenance Record (MMR) is FedEx\'s systematic method of obtaining vehicle maintenance records for service',
+        'provider-owned vehicles in compliance with the Federal Motor Carrier Safety Regulations which require motor carriers to have a',
+        'systematic method of causing vehicles operating under their motor carrier operating authority to be repaired and maintained.',
+        'Therefore, if FedEx does not receive records for a vehicle by the 20th of the month following the month in which maintenance or',
+        'repairs, were performed, packages will not be made available to this vehicle.'
+      ];
+      const fnSize = 8.47, fnLead = 9.48;
+      let fnY = 792 - 680.16 - fnLead + fnSize * 0.207;
+      for (const line of fnLines) {
+        page.drawText(line, { x: 36, y: fnY, size: fnSize, font: fnFont, color: rgb(0, 0, 0) });
+        fnY -= fnLead;
+      }
+      page.drawRectangle({ x: 34.56, y: 792 - 731.06 - 0.48, width: 542.88, height: 0.48, color: rgb(0, 0, 0) });
+      const ftSize = 7.65, ftLead = 9.5, ftTop = 733.04;
+      const ftY = 792 - ftTop - ftLead + ftSize * 0.207;
+      page.drawText('This form for service providers is accessed through mybizaccount.fedex.com', { x: 36, y: ftY, size: ftSize, font: ftFont, color: rgb(0, 0, 0) });
+      const pg = 'Page 1 of 1';
+      const pgW = ftFont.widthOfTextAtSize(pg, ftSize);
+      page.drawText(pg, { x: 576 - pgW, y: ftY, size: ftSize, font: ftFont, color: rgb(0, 0, 0) });
+    } catch (e) {}
     const [p] = await out.copyPages(src, [0]);
     out.addPage(p);
   }
@@ -1371,10 +1398,10 @@ html body #app>#mmrForm table td,html body #mmrForm table td{height:15px!importa
 #mmrForm.mgba355 .mgba-sbox.gsig{left:36.72pt;top:640.2pt;width:308.4pt;height:26.88pt}
 #mmrForm.mgba355 .mgba-sbox.gdt{left:396.84pt;top:640.2pt;width:177.6pt;height:26.88pt;font-size:11pt!important;line-height:14pt;padding:4pt 4pt 0!important}
 #mmrForm.mgba355 .mgba-sbox.gsig .mmrPN{font-family:'Great Vibes','Brush Script MT','Snell Roundhand',cursive;font-size:20pt;line-height:26pt;color:#0b1f5c;padding:0 6pt;height:100%;white-space:nowrap}
-#mmrForm.mgba355 .mgba-footn{position:absolute;left:36pt;top:680.16pt;width:540pt;margin:0;font-family:Calibri,'Calibri Italic',Arial,Helvetica,sans-serif;font-style:italic;font-weight:400;font-size:9.96pt;line-height:12.24pt;color:#000}
-#mmrForm.mgba355 .mgba-rule{position:absolute;left:34.56pt;top:757.68pt;width:542.88pt;height:0.48pt;background:#000}
-#mmrForm.mgba355 .mgba-footer{position:absolute;left:36pt;top:759.12pt;width:400pt;margin:0;font-family:Arial,Helvetica,sans-serif;font-weight:400;font-size:9pt;line-height:12.28pt;color:#000}
-#mmrForm.mgba355 .mgba-page{position:absolute;right:36pt;top:759.12pt;margin:0;font-family:Arial,Helvetica,sans-serif;font-weight:400;font-size:9pt;line-height:12.28pt;color:#000}
+#mmrForm.mgba355 .mgba-footn{position:absolute;left:36pt;top:680.16pt;width:540pt;margin:0;padding:0;font-family:Calibri,'Calibri Italic',Arial,Helvetica,sans-serif;font-style:italic;font-weight:400;font-size:8.47pt!important;line-height:9.48pt!important;color:#000;overflow:visible}
+#mmrForm.mgba355 .mgba-rule{position:absolute;left:34.56pt;top:731.06pt;width:542.88pt;height:0.48pt;background:#000}
+#mmrForm.mgba355 .mgba-footer{position:absolute;left:36pt;top:733.04pt;width:400pt;margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;font-weight:400;font-size:7.65pt!important;line-height:9.5pt!important;color:#000;overflow:visible;text-decoration:none}
+#mmrForm.mgba355 .mgba-page{position:absolute;right:36pt;top:733.04pt;margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;font-weight:400;font-size:7.65pt!important;line-height:9.5pt!important;color:#000;overflow:visible;text-decoration:none}
 .mgbaWrap{width:100%;overflow:auto;-webkit-overflow-scrolling:touch}
 @media print{
 @page{size:letter;margin:0}
@@ -1391,6 +1418,10 @@ html body #mmrForm.mgba355 table td{height:15.12pt!important;padding:0 4pt!impor
 html body #mmrForm.mgba355 p{margin:0!important}
 html body #mmrForm.mgba355 .mgba-bar{font-size:15.96pt!important}
 html body #mmrForm.mgba355 .mgba-note{font-size:8.04pt!important;border:0!important;background:transparent!important}
+html body #mmrForm.mgba355 .mgba-footn{font-size:8.47pt!important;line-height:9.48pt!important;top:680.16pt!important}
+html body #mmrForm.mgba355 .mgba-rule{top:731.06pt!important}
+html body #mmrForm.mgba355 .mgba-footer,html body #mmrForm.mgba355 .mgba-page{font-size:7.65pt!important;line-height:9.5pt!important;top:733.04pt!important}
+
 #mmrCtl,.mmrhd,header,#nav,#trialBar,#payBox,.supmail,#legalFoot,#hdrR,#prHelp{display:none!important}
 }
 
