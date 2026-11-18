@@ -837,9 +837,9 @@ window.bitFrom = R => { if (R.v === 2) return R; const o = { ...R, v: 2, it: {},
     if (!n) { if (x.m || x.c) rem.push(flat[k] + ': ' + [x.m, x.c].filter(Boolean).join(' ')); return; }
     const e = o.it[n] = o.it[n] || { ok: 0, done: 0, n: '' }; if (x.m === 'X' || x.m === 'NA') e.ok = 1; if (tag) e.done = 1; if (note) e.n = [e.n, note].filter(Boolean).join('; '); });
   if (rem.length) o.remarks = [o.remarks, rem.join('; ')].filter(Boolean).join(' '); return o; };
-window.virOpen = id => { window.VIRCUR = bitFrom(JSON.parse(JSON.stringify(db.vir.find(r => r.id === id)))); render(); scrollTo(0, 0); };
+window.virOpen = id => { const raw = db.vir.find(r => r.id === id); if (!raw) return; const R = JSON.parse(JSON.stringify(raw)); window.VIRCUR = isBit2517(R) ? R : bitFrom(R); render(); scrollTo(0, 0); };
 window.virNew = vid => { const v = db.vehicles.find(x => x.id === vid) || {}, p = (db.profile || [])[0] || {};
-  window.VIRCUR = { v: 2, vehicleId: v.id || '', inspDate: today(), nextDate: '', inspNo: '', make: v.make || '', model: v.model || '', year: v.year || '', plate: v.plate || '', vin: v.vin || '', unit: v.truck || '', mileage: v.mileage || '', company: p.company || '', lessor: '', d45: 0, d90: 0, it: {}, add: {}, pp: {}, pa: {}, remarks: '', workBy: '', workDate: '', inspBy: '', inspByDate: '', hrs: '', mins: '', labor: '', items: {} }; render(); scrollTo(0, 0); };
+  window.VIRCUR = { v: '2517', vehicleId: v.id || '', inspDate: today(), nextDate: '', inspNo: '', make: v.make || '', model: v.model || '', year: v.year || '', plate: v.plate || '', vin: v.vin || '', unit: v.truck || '', mileage: v.mileage || '', company: p.company || p.hub || '', lessor: '', d45: 0, d90: 0, it: {}, add: {}, pp: {}, pa: {}, remarks: '', workBy: '', workDate: '', inspBy: '', inspByDate: '', hrs: '', mins: '', labor: '', laborRate: '', laborCost: '', items: {} }; render(); scrollTo(0, 0); };
 const BIT_F = ['vehicleId', 'inspDate', 'nextDate', 'inspNo', 'make', 'model', 'year', 'plate', 'vin', 'unit', 'mileage', 'company', 'lessor', 'remarks', 'workBy', 'workDate', 'inspBy', 'inspByDate', 'hrs', 'mins', 'labor'];
 window.virSave = async () => { const f = document.getElementById('virF'), o = { ...window.VIRCUR, v: 2, it: {}, add: {}, pp: {}, pa: {} };
   for (const k of BIT_F) if (f.elements[k]) o[k] = f.elements[k].value;
@@ -855,13 +855,15 @@ window.bitSum = () => { const f = document.getElementById('virF'); if (!f) retur
   let lu = 0, fi = 0, pa = 0; f.querySelectorAll('[data-p]').forEach(r => { const c = num((r.querySelector('.pc') || {}).value); const g = r.dataset.p; if (g[0] === 'q') pa += c; else if (g[0] === 'F' && g[1] === 'I') fi += c; else lu += c; });
   const h = num(f.elements.labor.value), lc = h * BIT_RATE; f.querySelector('#bsL').textContent = m(lc); f.querySelector('#bsU').textContent = m(lu); f.querySelector('#bsF').textContent = m(fi); f.querySelector('#bsP').textContent = m(pa); f.querySelector('#bsT').textContent = m(lc + lu + fi + pa); };
 VIEWS.vir = function () {
-  let R = window.VIRCUR; if (R && R.v !== 2) R = window.VIRCUR = bitFrom(R);
+  let R = window.VIRCUR; if (R && !isBit2517(R) && R.v !== 2) R = window.VIRCUR = bitFrom(R); const is17 = isBit2517(R), isOld = !!(R && !is17);
   const hist = (db.vir || []).slice().sort((a, b) => (b.inspDate || '').localeCompare(a.inspDate || '')), T = window.virTruck || '';
-  const top = `<div class="dsh mmrhd"><div class="hx"><div><div class="hxk">BIT · 45/90 day</div><h2>BIT inspection &amp; maintenance record</h2><span>Truck/Tractor/Trailer · ${hist.length} on file</span></div></div></div>
-  <div class="row" id="mmrCtl" style="gap:8px;flex-wrap:wrap;margin:8px 0"><label>Truck <select id="virT" onchange="window.virTruck=this.value;render()"><option value="">All trucks</option>${db.vehicles.map(v => `<option value="${v.id}" ${v.id === T ? 'selected' : ''}>${esc(v.truck)}</option>`).join('')}</select></label><button class="b" onclick="virNew($('#virT').value || (db.vehicles[0] || {}).id)">New inspection record</button>${R ? `<button class="b" onclick="virSave()">Save</button><button class="b s" onclick="recPrint('vir')">Print / Save PDF</button><button class="b s" onclick="emailRec('vir')"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>Email</button><button class="b s" onclick="bitAll('ok')">Mark all OK</button><button class="b s" onclick="bitAll('done')">Mark all Done</button><button class="b s" onclick="bitAll('clear')">Clear all</button><button class="b s" onclick="window.VIRCUR=null;render()">Close</button>` : ''}</div>`;
-  const hl = `<div class="card"><h2>History</h2><p style="font-size:13px;color:#556;margin-top:0">This month: ${new Set(hist.filter(r => (r.inspDate || '').startsWith(today().slice(0, 7))).map(r => r.vehicleId)).size} of ${db.vehicles.length} trucks have a record. Open one and tap Print / Save PDF.</p>${hist.filter(r => !T || r.vehicleId === T).map(r => `<div class="row" style="border-bottom:1px solid #eef0f4;padding:6px 0;gap:8px;flex-wrap:wrap"><div style="flex:1;min-width:180px"><b>${esc(r.inspDate || '—')}</b> · Truck ${esc(truck(r.vehicleId))} · ${esc([r.year, r.make, r.model].join(' '))}<div style="font-size:12px;color:#667">Report no. ${esc(r.inspNo || '—')} · next ${esc(r.nextDate ? fmtD(r.nextDate) : '—')}</div></div><button class="b s" onclick="virOpen('${r.id}')">Open / print</button><button class="x" onclick="virDel('${r.id}')">${IC('x',16)}</button></div>`).join('') || '<p>No inspection records yet.</p>'}</div>`;
-  const bitCard = `<div class="card" id="bit2517Card"><h2>BIT Inspection &amp; Maintenance Record</h2><p style="font-size:13px;color:#556;margin-top:0">J.J. Keller BIT Program form 2517 — blank Truck/Tractor/Trailer Inspection and Maintenance Record, ready to print as one letter page.</p><div class="row" style="gap:8px;flex-wrap:wrap"><button class="b s" onclick="printBitForm()">Print / Save PDF</button><button class="b s" onclick="downloadBitPdf()">Download PDF</button></div></div>`;
-  if (!R) return `<div>${top}${bitCard}${hl}</div>`;
+  const top = `<div class="dsh mmrhd"><div class="hx"><div><div class="hxk">${isOld ? 'Older record' : 'Inspection record'}</div><h2>${isOld ? 'Vehicle Inspection Record (FL-BIT-1)' : 'BIT inspection &amp; maintenance record'}</h2><span>${isOld ? 'Still viewable and printable' : 'Form 2517 · Truck/Tractor/Trailer'} · ${hist.length} on file</span></div></div></div>
+  <div class="row" id="mmrCtl" style="gap:8px;flex-wrap:wrap;margin:8px 0"><label>Truck <select id="virT" onchange="window.virTruck=this.value;render()"><option value="">All trucks</option>${db.vehicles.map(v => `<option value="${v.id}" ${v.id === T ? 'selected' : ''}>${esc(v.truck)}</option>`).join('')}</select></label><button class="b" onclick="virNew($('#virT').value || (db.vehicles[0] || {}).id)">New inspection record</button>${is17 ? `<button class="b" onclick="bit2517Save()">Save</button><button class="b s" onclick="printBit2517()">Print / Save PDF</button><button class="b s" onclick="bit2517All('ok')">Mark all OK</button><button class="b s" onclick="bit2517All('done')">Mark all Done</button><button class="b s" onclick="bit2517All('clear')">Clear all</button><button class="b s" onclick="window.VIRCUR=null;render()">Close</button>` : isOld ? `<button class="b" onclick="virSave()">Save</button><button class="b s" onclick="recPrint('vir')">Print / Save PDF</button><button class="b s" onclick="emailRec('vir')"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>Email</button><button class="b s" onclick="bitAll('ok')">Mark all OK</button><button class="b s" onclick="bitAll('done')">Mark all Done</button><button class="b s" onclick="bitAll('clear')">Clear all</button><button class="b s" onclick="window.VIRCUR=null;render()">Close</button>` : ''}</div>`;
+  const listRows = list => list.filter(r => !T || r.vehicleId === T).map(r => `<div class="row" style="border-bottom:1px solid #eef0f4;padding:6px 0;gap:8px;flex-wrap:wrap"><div style="flex:1;min-width:180px"><b>${esc(r.inspDate || '—')}</b> · Truck ${esc(truck(r.vehicleId))} · ${esc([r.year, r.make, r.model].join(' '))}<div style="font-size:12px;color:#667">Report no. ${esc(r.inspNo || '—')} · next ${esc(r.nextDate ? fmtD(r.nextDate) : '—')}</div></div><button class="b s" onclick="virOpen('${r.id}')">Open / print</button><button class="x" onclick="virDel('${r.id}')">${IC('x',16)}</button></div>`).join('');
+  const hist17 = hist.filter(r => String(r.v) === '2517'), histOld = hist.filter(r => String(r.v) !== '2517');
+  const hl = `<div class="card"><h2>History</h2><p style="font-size:13px;color:#556;margin-top:0">This month: ${new Set(hist17.filter(r => (r.inspDate || '').startsWith(today().slice(0, 7))).map(r => r.vehicleId)).size} of ${db.vehicles.length} trucks have a BIT 2517 record. Tap New inspection record to start one, or Open / print a saved form.</p>${listRows(hist17) || '<p>No BIT 2517 records yet.</p>'}</div>` + (histOld.length ? `<div class="card"><h2>Older records</h2><p style="font-size:13px;color:#556;margin-top:0">Previous Vehicle Inspection Records (FL-BIT-1). These are still viewable and printable. New records use the BIT 2517 form.</p>${listRows(histOld) || '<p>No older records for this truck.</p>'}</div>` : '');
+  if (!R) return `<div>${top}${hl}</div>`;
+  if (is17) { setTimeout(bit2517Sum, 0); return `${top}${bit2517Sheet(R)}${hl}`; }
   const I = (k, w, x) => `<input name="${k}" value="${esc(R[k] ?? '')}" ${x || ''} class="bi" style="width:${w || '100%'}">`;
   const L = (t, k, w) => `<span class="bL">${t}</span>${I(k, w)}`;
   const C = (on, b) => `<span class="${on ? 'ckon' : 'ckb'} bx" data-b="${b}" onclick="bitCk(this)">${on ? '✕' : ''}</span>`;
@@ -902,47 +904,317 @@ VIEWS.vir = function () {
   <div><div class="bH">${L('Work completed by:', 'workBy')}<span class="bL">Date</span>${I('workDate', '70px', 'data-printdate')}</div><div class="bH">${L('Inspected by:', 'inspBy')}<span class="bL">Date</span>${I('inspByDate', '70px', 'data-printdate')}</div><div class="bH">${L('Total time', 'hrs', '50px')}<span class="bL">Hours,</span>${I('mins', '40px')}<span class="bL">Minutes</span></div></div></div>
  <div class="bfoot" style="width:100%;box-sizing:border-box;text-align:left;font-size:6.8px;margin-top:2px;display:flex;justify-content:space-between;gap:16px"><span>Keep inspection, maintenance and lubrication records for at least 2 years (CVC 34505.5).</span><span>FleetLog · FL-BIT-1 · Page 1 of 1</span></div></form></div>`;
   setTimeout(bitSum, 0);
-  return `${top}${sheet}${bitCard}${hl}`;
+  return `${top}${sheet}${hl}`;
 };
-/*BIT2517 printable blank J.J. Keller BIT Program form 2517 — scan as a full letter page. Does not change the Monthly record or the fillable FL-BIT-1 Vehicle Inspection Record.*/
-window.BIT_FORM_SRC = '/forms/bit-2517.jpg';
-window.bitPdfBlob = async () => {
-  await loadJs('/vendor/pdf-lib.min.js');
-  const res = await fetch(window.BIT_FORM_SRC);
-  if (!res.ok) throw new Error('Could not load the BIT form');
-  const bytes = new Uint8Array(await res.arrayBuffer());
-  const pdf = await PDFLib.PDFDocument.create();
-  try { pdf.setTitle('BIT Inspection & Maintenance Record'); pdf.setCreator('FleetLog'); } catch (e) {}
-  const page = pdf.addPage([612, 792]);
-  const img = await pdf.embedJpg(bytes);
-  const pw = 612, ph = 792;
-  let w = pw, h = img.height * pw / img.width;
-  if (h > ph) { w = w * ph / h; h = ph; }
-  page.drawImage(img, { x: (pw - w) / 2, y: (ph - h) / 2, width: w, height: h });
-  const out = await pdf.save();
-  return new Blob([out], { type: 'application/pdf' });
+/*BIT2517 fillable BIT Program Truck/Tractor/Trailer Inspection and Maintenance Record (form 2517 layout). New records only; FL-BIT-1 saved records stay viewable via virOpen/virSave/recPrint. Monthly record untouched.*/
+window.F17_T = [
+  ['INTERIOR AND EXTERIOR', [
+    [1, 'Fire extinguisher and reflectors-secured-marked'],
+    [2, 'Horn-defrosters, gauges and speedometer'],
+    [3, 'Mirrors and supports'],
+    [4, 'Windshield wipers-window cracks, condition'],
+    [5, 'Check all lights-turn signals-reflectors, mud flaps'],
+    [6, 'Check electrical wiring-condition and protection'],
+    [7, 'Check batteries-water terminals and cable'],
+    [8, 'Warning devices-air, oil and temperature, vacuum', 1]
+  ]],
+  ['ENGINE AND ELECTRIC', [
+    [9, 'Radiator and water hoses-condition-leaks'],
+    [10, 'Belts-compressor(s), fan and water pump', 1],
+    [11, 'Air lines-leaks, condition and protection', 1],
+    [12, 'Fuel tanks-lines-pump, condition and protection'],
+    [13, 'Manifold and flange gaskets-muffler and condition'],
+    [14, 'Engine mounts, oil and fuel leaks'],
+    [15, 'Clutch adjustment and free play'],
+    [16, 'Throttle and linkage, air filter'],
+    [17, 'Generator/alternator, starter, brushes and wiring']
+  ]],
+  ['BRAKES', [
+    [18, 'Tractor protection valve-breakaway test', 1],
+    [19, 'Brakes-lining, drums, and adjustment-\nnear cam over, pedal ht.-hyd.', 1],
+    [20, 'Hoses and tubing condition-\nprotection, hyd., brake reservoir level', 1],
+    [21, 'Air leaks and 1-minute brake application test, vacuum loss', 1],
+    [22, 'Air governor adjustment-minimum 85-maximum 130', 1],
+    [23, 'Identify number 1 air tank-drain-test check valve', 1],
+    [24, 'All tanks secure, drains operable, drain tanks', 1],
+    [25, 'Check tires, wheels, nuts and studs,\ncracked, secure and inflation, tread', 1],
+    [26, 'Parking brake-condition and adjustment', 1],
+    [27, 'Emergency stopping system-labeled, operable', 1],
+    [28, 'Release after loss of service air-test anti skid lamp', 1]
+  ]],
+  ['CHASSIS', [
+    [29, 'Check steering gear and mounting-free lash', 1],
+    [30, 'Steering arms, drag links and tie rod ends', 1],
+    [31, 'Fifth wheel condition and mounting', 1],
+    [32, 'Springs, shackles and U-bolts-torque arms', 1],
+    [33, 'Check frame, cross members, cracks, etc.'],
+    [34, 'Drive shaft and universal joints'],
+    [35, 'Transmission, differential-mounting and seals'],
+    [36, 'Wheel seals leaks, hydraulic brake system leaks', 1],
+    [37, 'Clean under carriage']
+  ]]
+];
+window.F17_R = [
+  [38, 'Lights-stop, tail, turn-reflectors'],
+  [39, 'Air leaks-brake system', 1],
+  [40, 'Air leaks-dump system'],
+  [41, 'Cracks in body and sub frame'],
+  [42, 'Brakes-adjustment-drums-near cam over', 1],
+  [43, 'Springs-U bolts-torque arm', 1],
+  [44, 'Drawbar-hitch and safety cable-check strand wear', 1],
+  [45, 'Fifth wheel on pull trailer', 1],
+  [46, 'Tires, wheel-nuts and studs', 1],
+  [47, 'Fifth wheel on pin wear-safety lock', 1],
+  [48, 'Emergency relay valves, tank mounting', 1],
+  [49, 'Tarps'],
+  [50, 'Electrical connections-lead wire'],
+  [51, 'Air lines-between trailers, gladhands, rubbers', 1],
+  [52, 'Mud flaps, fenders']
+];
+window.F17_P = [['LUBRICANTS', ['Crankcase Oil', 'Trans. Lube', 'Gear Lube', 'Chassis Lube'], 1], ['FLUIDS', ['Antifreeze', 'Brake Fluid', 'Hydraulic Fluid'], 1], ['FILTERS', ['Oil Filter', 'Air Filter', 'Fuel Filter'], 0]];
+window.F17_F = ['vehicleId', 'inspDate', 'nextDate', 'inspNo', 'make', 'model', 'year', 'plate', 'vin', 'unit', 'mileage', 'company', 'remarks', 'workBy', 'workDate', 'inspBy', 'inspByDate', 'hrs', 'mins', 'labor', 'laborRate', 'laborCost'];
+window.isBit2517 = R => !!R && String(R.v) === '2517';
+window.bit2517Save = async () => {
+  const f = document.getElementById('b17F'); if (!f) return;
+  const o = { ...window.VIRCUR, v: '2517', it: {}, add: {}, pp: {}, pa: {} };
+  for (const k of F17_F) if (f.elements[k]) o[k] = f.elements[k].value;
+  o.d45 = f.querySelector('[data-b="d45"]') && f.querySelector('[data-b="d45"]').classList.contains('ckon') ? 1 : 0;
+  o.d90 = f.querySelector('[data-b="d90"]') && f.querySelector('[data-b="d90"]').classList.contains('ckon') ? 1 : 0;
+  f.querySelectorAll('[data-i]').forEach(r => {
+    const n = r.dataset.i, okEl = r.querySelector('[data-b=ok]'), dnEl = r.querySelector('[data-b=done]');
+    const ok = okEl && okEl.classList.contains('ckon') ? 1 : 0, done = dnEl && dnEl.classList.contains('ckon') ? 1 : 0;
+    const t = ((r.querySelector('.bn') || {}).value || '').trim(), lab = r.querySelector('.bl'), L = lab ? lab.value.trim() : '';
+    if (ok || done || t || L) (n[0] === 'a' ? o.add : o.it)[n] = { ok, done, n: t, l: L };
+  });
+  f.querySelectorAll('[data-p]').forEach(r => { const a = [...r.querySelectorAll('input')].map(x => x.value.trim()); if (a.some(Boolean)) (r.dataset.p[0] === 'q' ? o.pa : o.pp)[r.dataset.p] = a; });
+  if (!o.vehicleId) return alert('Pick a truck first.');
+  try { const saved = o.id ? await API.update('vir', o.id, o) : await API.add('vir', o); window.VIRCUR = saved; await refresh(); alert('BIT 2517 record saved.'); } catch (e) { alert(e.message); }
 };
-window.printBitForm = async () => {
-  const touch = /iPhone|iPad|iPod|Android|Mobile/i.test(navigator.userAgent) || (navigator.maxTouchPoints || 0) > 0;
-  let tab = null;
-  try { tab = window.open('', '_blank'); if (tab) tab.document.write('<title>BIT Inspection & Maintenance Record</title><p style="font:18px system-ui,sans-serif;padding:24px">Making the PDF…</p>'); } catch (e) { tab = null; }
-  let blob;
-  try { blob = await bitPdfBlob(); } catch (e) { if (tab) try { tab.close(); } catch (x) {} return alert(e.message || 'Could not make the BIT form PDF.'); }
-  const url = URL.createObjectURL(blob); setTimeout(() => URL.revokeObjectURL(url), 300000);
-  const name = 'FleetLog-BIT-2517.pdf';
-  const say = t => { try { toast(t); } catch (x) {} };
-  const opened = () => say(touch ? 'PDF opened in a new tab: tap Share > Print.' : 'PDF opened in a new tab: press the printer icon (or Share > Print on phone).');
-  const dl = () => { const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); say('PDF downloaded. Open it and print.'); };
-  if (tab && !tab.closed) { try { tab.location.href = url; return opened(); } catch (e) { try { tab.close(); } catch (x) {} } }
-  let w = null; try { w = window.open(url, '_blank'); } catch (e) {} if (w) return opened(); dl();
+window.bit2517All = async col => {
+  const f = document.getElementById('b17F'); if (!f) return;
+  f.querySelectorAll('[data-i]').forEach(r => {
+    const add = r.dataset.i[0] === 'a', lab = r.querySelector('.bl'), has = !add || (lab && lab.value.trim()) || ((r.querySelector('.bn') || {}).value || '').trim();
+    ['ok', 'done'].forEach(b => {
+      const el = r.querySelector('[data-b=' + b + ']'); if (!el) return;
+      const want = col === 'clear' ? false : (col === b && has);
+      if (want !== el.classList.contains('ckon')) bitCk(el);
+    });
+  });
+  if (!f.elements.vehicleId || !f.elements.vehicleId.value) return;
+  const al = window.alert; window.alert = () => {}; try { await bit2517Save(); } finally { window.alert = al; }
 };
-window.downloadBitPdf = async () => {
+window.bit2517Sum = () => {
+  const f = document.getElementById('b17F'); if (!f) return;
+  const num = s => parseFloat(String(s || '').replace(/[^0-9.]/g, '')) || 0;
+  const money = n => n ? n.toFixed(2) : '';
+  let lu = 0, fi = 0, pa = 0;
+  f.querySelectorAll('[data-p]').forEach(r => {
+    const c = num((r.querySelector('.pc') || {}).value), g = r.dataset.g || r.dataset.p;
+    if (g === 'pa' || (g[0] === 'q')) pa += c;
+    else if (g === 'fi' || (g[0] === 'F' && g[1] === 'I')) fi += c;
+    else lu += c;
+  });
+  const hrs = num((f.elements.labor || {}).value), rate = num((f.elements.laborRate || {}).value);
+  let lc = hrs && rate ? hrs * rate : num((f.elements.laborCost || {}).value);
+  if (f.elements.laborCost && (hrs || rate)) f.elements.laborCost.value = money(hrs * rate);
+  lc = num((f.elements.laborCost || {}).value);
+  const set = (id, v) => { const el = f.querySelector(id); if (el) { if (el.tagName === 'INPUT') el.value = v; else el.textContent = v ? '$' + v : ''; } };
+  set('#b17Lu', money(lu)); set('#b17Fi', money(fi)); set('#b17Pa', money(pa)); set('#b17To', money(lc + lu + fi + pa));
+};
+window.bit2517Sheet = function (R) {
+  const I = (k, x) => `<input name="${k}" value="${esc(R[k] ?? '')}" ${x || ''} class="b17i">`;
+  const Ck = (on, b, cls) => `<span class="${on ? 'ckon' : 'ckb'} ${cls || 'bk'}" data-b="${b}" onclick="bitCk(this)">${on ? '✓' : ''}</span>`;
+  const row = (n, t, red, key) => {
+    const e = (key[0] === 'a' ? (R.add || {}) : (R.it || {}))[key] || {};
+    const label = n ? esc(t).replace(/\n/g, '<br>') : `<input class="bl b17i" value="${esc(e.l || '')}">`;
+    return `<tr data-i="${key}" class="${red ? 'b17red' : ''}${String(t).includes('\n') ? ' b17wrap' : ''}"><td class="bc">${Ck(e.ok, 'ok')}</td><td class="bc">${Ck(e.done, 'done')}</td><td class="bc"><input class="bn b17i" value="${esc(e.n || '')}"></td><td class="bnum">${n ? n + '.' : ''}</td><td class="btxt">${label}</td><td class="bst">${red ? '*' : ''}</td></tr>`;
+  };
+  const sec = t => `<tr class="b17sec"><td class="bc"></td><td class="bc"></td><td class="bc"></td><td></td><td colspan="2">${esc(t)}</td></tr>`;
+  const hd = t => `<tr class="b17hd"><th>OK</th><th>DONE</th><th>NOTES</th><th></th><th>${t}</th><th></th></tr>`;
+  const left = hd('TRUCK AND/OR TRACTOR') + F17_T.map(([s, a]) => sec(s) + a.map(([n, t, r]) => row(n, t, r, String(n))).join('')).join('') + sec('ADDITIONAL ITEMS') + [1, 2, 3].map(j => row(0, '', 0, 'aT' + j)).join('');
+  const rightItems = hd('TRAILER(S)') + F17_R.map(([n, t, r]) => row(n, t, r, String(n))).join('') + sec('ADDITIONAL ITEMS') + [1, 2, 3].map(j => row(0, '', 0, 'aR' + j)).join('');
+  const pv = (k, i) => esc(((R.pp && (R.pp[k] || R.pa && R.pa[k])) || (R.pa && R.pa[k]) || [])[i] || '');
+  const prod = F17_P.map(([g, a, amt]) => {
+    const gkey = g.slice(0, 2), kind = g === 'FILTERS' ? 'fi' : 'lu';
+    return `<tr class="b17pg"><td></td><td colspan="${amt ? 3 : 2}">${g}</td></tr>` + a.map((t, j) => {
+      const k = gkey + j, vals = (R.pp && R.pp[k]) || [];
+      return `<tr data-p="${k}" data-g="${kind}"><td><input class="b17i" value="${esc(vals[0] || '')}"></td><td>${esc(t)}</td>${amt ? `<td><input class="b17i" value="${esc(vals[1] || '')}"></td>` : '<td></td>'}<td>$<input class="b17i pc" value="${esc(vals[amt ? 2 : 1] || '')}" oninput="bit2517Sum()"></td></tr>`;
+    }).join('');
+  }).join('');
+  const parts = [0, 1, 2, 3, 4, 5, 6, 7].map(j => {
+    const k = 'q' + j, vals = (R.pa && R.pa[k]) || [];
+    return `<tr data-p="${k}" data-g="pa"><td><input class="b17i" value="${esc(vals[0] || '')}"></td><td><input class="b17i" value="${esc(vals[1] || '')}"></td><td><input class="b17i" value="${esc(vals[2] || '')}"></td><td>$<input class="b17i pc" value="${esc(vals[3] || '')}" oninput="bit2517Sum()"></td></tr>`;
+  }).join('');
+  return `<div id="b17Wrap"><div id="bit2517Form"><style id="b17css">
+#b17Wrap{margin:0 auto 16px;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+#bit2517Form{width:8.5in;min-height:11in;height:11in;box-sizing:border-box;margin:0 auto;padding:0.16in 0.22in 0.12in;background:#fff;color:#000;font-family:Arial,Helvetica,sans-serif;box-shadow:0 1px 8px #0002;display:flex;flex-direction:column;justify-content:flex-start;gap:0;overflow:hidden}#bit2517Form,#bit2517Form *{border-radius:0!important}
+#b17F{flex:1;display:flex;flex-direction:column;min-height:0;font-size:7.2pt;line-height:1.12;color:#000}
+#bit2517Form input.b17i, #bit2517Form .b17i{border:0;border-bottom:1px solid #000;border-radius:0;background:transparent;font:inherit;color:#000;padding:0 1px;min-height:0;height:11px;box-sizing:border-box;outline:0}
+#bit2517Form .b17-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:2px}
+#bit2517Form .b17-title{font-size:10.2pt;font-weight:700;letter-spacing:.01em;line-height:1.15;padding-top:2px;flex:1}
+#bit2517Form .b17-next{width:1.55in;flex:0 0 1.55in;font-size:6.5pt;font-weight:700;text-align:left;line-height:1.15}
+#bit2517Form .b17-next span{display:block}#bit2517Form .b17-next input{width:100%;margin-top:1px}
+#bit2517Form .b17-lab{font-size:5.8pt;font-weight:700;text-transform:uppercase;line-height:1.15;white-space:pre-line}#bit2517Form .b17-veh .b17-lab,#bit2517Form .b17-next,#bit2517Form .b17-unit .b17-lab,#bit2517Form .b17-date .b17-lab,#bit2517Form .b17-rep .b17-lab,#bit2517Form .b17-lic .b17-lab,#bit2517Form .b17-odo .b17-lab{white-space:nowrap}
+#bit2517Form .b17-headgrid{display:grid;grid-template-columns:1.15fr 1.55fr 1.05fr 0.9fr 1.1fr 1.2fr;grid-template-areas:"colab coname unit days date rep" "colab coname unit days lic odo";gap:1px 8px;align-items:end;margin-top:3px}
+#bit2517Form .b17-colab{grid-area:colab;align-self:center}
+#bit2517Form .b17-coname{grid-area:coname;align-self:end}
+#bit2517Form .b17-coname input{width:100%}
+#bit2517Form .b17-unit{grid-area:unit}#bit2517Form .b17-days{grid-area:days}#bit2517Form .b17-date{grid-area:date}#bit2517Form .b17-rep{grid-area:rep}#bit2517Form .b17-lic{grid-area:lic}#bit2517Form .b17-odo{grid-area:odo}
+#bit2517Form .b17-days{font-size:6.5pt;line-height:1.45;padding-bottom:1px}
+#bit2517Form .b17-days .bx,#bit2517Form .b17-days .bk{display:inline-block;width:9px;height:9px;border:1px solid #000;background:#fff;text-align:center;line-height:9px;font-size:8px;font-weight:700;cursor:pointer;vertical-align:middle;margin-right:2px}
+#bit2517Form .b17-veh{display:flex;align-items:flex-end;gap:6px;margin-top:2px}
+#bit2517Form .b17-veh .fld{display:flex;align-items:flex-end;gap:3px;flex:1}
+#bit2517Form .b17-veh .fld.w-make{flex:1.1}#bit2517Form .b17-veh .fld.w-model{flex:1.1}#bit2517Form .b17-veh .fld.w-year{flex:.55}#bit2517Form .b17-veh .fld.w-serial{flex:1.6}#bit2517Form .b17-veh .fld.w-odo{flex:1.1}
+#bit2517Form .b17-veh .fld input{flex:1}
+#bit2517Form .b17-instr{color:#c0272d;font-size:5.7pt;line-height:1.25;margin:3px 0 2px;display:flex;justify-content:space-between;gap:8px}
+#bit2517Form .b17-instr .r{white-space:nowrap;align-self:flex-end}
+#bit2517Form .b17-body{display:grid;grid-template-columns:1.12fr 0.88fr;gap:0;border:1px solid #000;flex:0 0 auto;align-items:start}
+#bit2517Form .b17-body>div:first-child{border-right:2px solid #000;display:flex;flex-direction:column}#bit2517Form .b17-body>div:first-child table{flex:0 0 auto;width:100%}
+#bit2517Form .b17-body table{width:100%;border-collapse:collapse;table-layout:fixed}
+#bit2517Form .b17-body td,#bit2517Form .b17-body th{padding:0 1px 0 2px;font-size:6.3pt;border-bottom:1px solid #9a9a9a;background:#fff;color:#000;vertical-align:middle;height:14px;border-radius:0}
+#bit2517Form .b17-body th{font-size:5.3pt;font-weight:700;border:1px solid #000;text-align:center}
+#bit2517Form .b17hd th:nth-child(5){text-align:center;letter-spacing:.04em}
+#bit2517Form .bc{border-left:1px solid #000;border-right:1px solid #000;text-align:center;padding:0;width:16px;border-radius:0}
+#bit2517Form .bc .b17i{width:100%;border:0!important;height:11px;text-align:center}
+#bit2517Form .bk{display:block;width:100%;height:100%;min-height:12px;border:0!important;background:transparent!important;cursor:pointer;text-align:center;font-weight:700;font-size:9px;line-height:12px;color:#000;border-radius:0}
+#bit2517Form .bnum{text-align:right;padding:0 1px;width:18px;white-space:nowrap}
+#bit2517Form .btxt{text-align:left;overflow:hidden;line-height:1.15}
+#bit2517Form .bst{color:#c0272d;width:8px;text-align:center;font-weight:700}
+#bit2517Form tr.b17red .btxt,#bit2517Form tr.b17red .bnum{color:#c0272d}
+#bit2517Form tr.b17sec td{background:#fff!important;color:#000!important;border-bottom:1px solid #9a9a9a;height:12px;line-height:12px;padding:0}
+#bit2517Form tr.b17sec td:nth-last-child(1){background:#000!important;color:#fff!important;font-weight:700;text-align:center;font-size:6.5pt;letter-spacing:.04em;border:1px solid #000}
+#bit2517Form .b17-right{display:flex;flex-direction:column;min-height:0;justify-content:flex-start}#bit2517Form .b17-right>table{flex:0 0 auto}#bit2517Form .b17-prod{flex:0 0 auto;margin-top:0}
+#bit2517Form .b17-prod{border-top:0}
+#bit2517Form .b17-bar{background:#000;color:#fff;font-weight:700;text-align:center;font-size:6.8pt;letter-spacing:.04em;padding:1px 0}
+#bit2517Form .b17-bar.inv{background:#fff;color:#000;border-top:1px solid #000}
+#bit2517Form .b17-prod table td,#bit2517Form .b17-prod table th{border-bottom:1px solid #bbb;height:12px;font-size:6.3pt}
+#bit2517Form .b17-prod th{border:0;font-size:5.8pt;font-weight:700;text-decoration:underline;text-align:center;height:11px}
+#bit2517Form .b17-prod tr.b17pg td{font-weight:700;border-bottom:0;height:11px}
+#bit2517Form .b17-prod td:last-child{white-space:nowrap}
+#bit2517Form .b17-prod .pc{width:42px;border-bottom:1px solid #000}
+#bit2517Form .b17-sum td{border-bottom:1px solid #bbb;height:13px;font-size:6.5pt}
+#bit2517Form .b17-sum td:last-child{text-align:left;white-space:nowrap;width:70px}
+#bit2517Form .b17-sum .tot td{font-weight:700;border-bottom:0}
+#bit2517Form .b17-sign{display:grid;grid-template-columns:1.12fr 0.88fr;border:1px solid #000;border-top:0;margin-top:0}
+#bit2517Form .b17-sign>div{padding:2px 4px}
+#bit2517Form .b17-sign>div:last-child{border-left:1px solid #000}
+#bit2517Form .b17-sign .b17-lab{display:inline;white-space:nowrap}
+#bit2517Form .b17-sign .row{display:flex;align-items:flex-end;gap:4px;margin:1px 0;flex-wrap:nowrap}
+#bit2517Form .b17-foot{display:flex;justify-content:space-between;align-items:center;font-size:5.6pt;font-weight:700;letter-spacing:.02em;margin-top:4px;gap:12px;text-transform:uppercase}
+#bit2517Form .b17-foot .note{font-weight:400;text-transform:none;color:#444}
+#bit2517Form col.c-ok{width:16px}#bit2517Form col.c-do{width:18px}#bit2517Form col.c-no{width:28px}#bit2517Form col.c-nu{width:17px}#bit2517Form col.c-st{width:8px}
+@media screen and (max-width:800px){#b17Wrap{overflow-x:auto}#bit2517Form{box-shadow:none}}
+@media print{body.b17print>*:not(#app){display:none!important}body.b17print #app>*:not(#b17Wrap){display:none!important}body.b17print,body.b17print html,body.b17print #app{margin:0!important;padding:0!important;background:#fff!important}
+body.b17print #b17Wrap{overflow:visible!important;margin:0!important}body.b17print #bit2517Form{box-shadow:none!important;width:8.5in;height:11in;padding:0.15in 0.2in;page-break-inside:avoid;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body.b17print #bit2517Form tr.b17sec td,body.b17print #bit2517Form .b17-bar{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+@page{size:letter;margin:0}}
+</style><form id="b17F" onsubmit="return false"><input type="hidden" name="vehicleId" value="${esc(R.vehicleId)}">
+  <div class="b17-top"><div class="b17-title">BIT PROGRAM TRUCK/TRACTOR/TRAILER INSPECTION AND MAINTENANCE RECORD</div><div class="b17-next"><span>NEXT<br>INSPECTION</span>${I('nextDate')}</div></div>
+  <div class="b17-headgrid">
+    <div class="b17-colab"><div class="b17-lab">COMPANY<br>OR<br>LESSOR/CONTRACTOR</div></div>
+    <div class="b17-coname">${I('company')}</div>
+    <div class="b17-unit"><div class="b17-lab">UNIT NO.</div>${I('unit')}</div>
+    <div class="b17-days">${Ck(R.d45, 'd45', 'bx')} 45 DAY<br>${Ck(R.d90, 'd90', 'bx')} 90 DAY</div>
+    <div class="b17-date"><div class="b17-lab">DATE</div>${I('inspDate')}</div>
+    <div class="b17-rep"><div class="b17-lab">REPORT NO.</div>${I('inspNo')}</div>
+    <div class="b17-lic"><div class="b17-lab">LICENSE NO.</div>${I('plate')}</div>
+    <div class="b17-odo"><div class="b17-lab">ODOMETER READING</div>${I('mileage')}</div>
+  </div>
+  <div class="b17-veh">
+    <div class="fld w-make"><span class="b17-lab">VEHICLE MAKE</span>${I('make')}</div>
+    <div class="fld w-model"><span class="b17-lab">MODEL</span>${I('model')}</div>
+    <div class="fld w-year"><span class="b17-lab">YEAR</span>${I('year')}</div>
+    <div class="fld w-serial"><span class="b17-lab">SERIAL NO.</span>${I('vin')}</div>
+  </div>
+  <div class="b17-instr"><span>Indicate completion of the report: Item is ok or not applicable (✓); work is completed, done (✓); type of work completed notes: (A) Adjust, (O or G) Oil or Grease, (R) Replace or Rebuild, (T) Test, (SR) See Remarks.</span><span class="r">*Inspection of these items required by 34505.5 CVC</span></div>
+  <div class="b17-body">
+    <div><table><colgroup><col class="c-ok"><col class="c-do"><col class="c-no"><col class="c-nu"><col><col class="c-st"></colgroup>${left}</table></div>
+    <div class="b17-right">
+      <table><colgroup><col class="c-ok"><col class="c-do"><col class="c-no"><col class="c-nu"><col><col class="c-st"></colgroup>${rightItems}</table>
+      <div class="b17-prod">
+        <div class="b17-bar">PRODUCTS / PARTS USED</div>
+        <table><colgroup><col style="width:42px"><col><col style="width:48px"><col style="width:58px"></colgroup>
+          <tr><th>Item No.</th><th></th><th>Amt.</th><th>Cost</th></tr>${prod}</table>
+        <div class="b17-bar inv">PARTS &amp; ACCESSORIES</div>
+        <table><colgroup><col style="width:42px"><col><col style="width:36px"><col style="width:58px"></colgroup>
+          <tr><th></th><th>Description</th><th>Qty.</th><th>Cost</th></tr>${parts}</table>
+        <div class="b17-bar inv">TOTAL COST SUMMARY</div>
+        <table class="b17-sum"><colgroup><col><col style="width:70px"></colgroup>
+          <tr><td>Labor Cost Time ${I('labor', 'oninput="bit2517Sum()" style="width:36px"')} $ ${I('laborRate', 'oninput="bit2517Sum()" style="width:36px"')} hr. </td><td>$ ${I('laborCost', 'oninput="bit2517Sum()" style="width:48px"')}</td></tr>
+          <tr><td>Lubricants &amp; Fluids Cost</td><td>$ <input class="b17i" id="b17Lu" readonly></td></tr>
+          <tr><td>Filters Cost</td><td>$ <input class="b17i" id="b17Fi" readonly></td></tr>
+          <tr><td>Parts &amp; Accessories Cost</td><td>$ <input class="b17i" id="b17Pa" readonly></td></tr>
+          <tr class="tot"><td style="text-align:right">TOTAL COST</td><td>$ <input class="b17i" id="b17To" readonly></td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="b17-sign">
+    <div><span class="b17-lab">REMARKS (use reverse side if required)</span> ${I('remarks', 'style="width:98%;border-bottom:1px solid #000"')}</div>
+    <div>
+      <div class="row"><span class="b17-lab">Work Completed by:</span>${I('workBy', 'style="flex:1"')}<span class="b17-lab">Date</span>${I('workDate', 'style="width:70px" data-printdate')}</div>
+      <div class="row"><span class="b17-lab">Inspected by:</span>${I('inspBy', 'style="flex:1"')}<span class="b17-lab">Date</span>${I('inspByDate', 'style="width:70px" data-printdate')}</div>
+      <div class="row"><span class="b17-lab">Total Time</span>${I('hrs', 'style="width:44px"')}<span class="b17-lab">Hours,</span>${I('mins', 'style="width:36px"')}<span class="b17-lab">Minutes</span></div>
+    </div>
+  </div>
+  <div class="b17-foot"><span>MAINTAIN A TWO YEAR'S ACCUMULATION OF INSPECTION, MAINTENANCE, AND LUBRICATION RECORDS</span><span class="note">Based on BIT form 2517 layout</span></div>
+</form></div></div>`;
+};
+window.bit2517Pdf = async () => {
+  const el = document.getElementById('bit2517Form'); if (!el) throw new Error('Open a BIT 2517 record first.');
+  try { fillPrintDate(); } catch (e) {}
+  await loadJs('/vendor/html2canvas.min.js');
+  try { await document.fonts.ready; } catch (e) {}
+  const W = 816, H = 1056, prevShadow = el.style.boxShadow, prevMargin = el.style.margin;
+  const swapped = [];
+  el.style.boxShadow = 'none'; el.style.margin = '0';
+  el.querySelectorAll('input,select,textarea').forEach(e => {
+    if (e.type === 'hidden') return;
+    const cs = getComputedStyle(e), sp = document.createElement('span');
+    sp.className = e.className; sp.textContent = e.value || '';
+    ['fontSize','fontWeight','fontFamily','color','paddingLeft','paddingRight','paddingTop','paddingBottom','borderTop','borderRight','borderBottom','borderLeft','backgroundColor','textAlign','boxSizing','display','width','height','lineHeight'].forEach(k => { sp.style[k] = cs[k]; });
+    sp.style.borderRadius = '0';
+    if (e.offsetWidth) sp.style.width = e.offsetWidth + 'px';
+    if (e.offsetHeight) sp.style.height = e.offsetHeight + 'px';
+    e.parentNode.insertBefore(sp, e); e.style.display = 'none'; swapped.push([e, sp]);
+  });
   try {
-    const blob = await bitPdfBlob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = 'FleetLog-BIT-2517.pdf'; document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 300000);
-  } catch (e) { alert(e.message || 'Could not download the BIT form PDF.'); }
+    const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false, width: W, height: H, windowWidth: 1400, windowHeight: 1400, scrollX: 0, scrollY: 0, x: 0, y: 0 });
+    await loadJs('/vendor/jspdf.umd.min.js');
+    const pdf = new jspdf.jsPDF({ unit: 'pt', format: 'letter', orientation: 'portrait', compress: true });
+    try { pdf.setProperties({ title: 'BIT Inspection & Maintenance Record', creator: 'FleetLog' }); } catch (e) {}
+    pdf.addImage(canvas.toDataURL('image/jpeg', 0.93), 'JPEG', 0, 0, 612, 792);
+    return pdf.output('blob');
+  } finally {
+    swapped.forEach(([e, sp]) => { sp.remove(); e.style.display = ''; });
+    el.style.boxShadow = prevShadow; el.style.margin = prevMargin;
+  }
+};
+window.bit2517PrintHtml = () => {
+  const el = document.getElementById('bit2517Form'); if (!el) throw new Error('Open a BIT 2517 record first.');
+  try { fillPrintDate(); } catch (e) {}
+  const css = (document.getElementById('b17css') || {}).textContent || '';
+  const clone = el.cloneNode(true);
+  const si = el.querySelectorAll('input,select,textarea'), ci = clone.querySelectorAll('input,select,textarea');
+  si.forEach((e, i) => { const d = ci[i]; if (!d) return; d.setAttribute('value', e.value); d.value = e.value; if (d.tagName === 'TEXTAREA') d.textContent = e.value; if (d.type === 'checkbox' || d.type === 'radio') d.checked = e.checked; });
+  clone.style.boxShadow = 'none'; clone.style.margin = '0';
+  clone.querySelectorAll('style').forEach(s => s.remove());
+  return '<!doctype html><html><head><meta charset="utf-8"><title>BIT Inspection &amp; Maintenance Record</title><style>' +
+    css +
+    ' @page{size:letter;margin:0} html,body{margin:0;padding:0;background:#fff} #bit2517Form,#bit2517Form *{border-radius:0!important;-webkit-print-color-adjust:exact;print-color-adjust:exact} #bit2517Form{box-shadow:none!important;margin:0 auto!important;width:8.5in;height:11in;min-height:11in;max-height:11in}</style></head><body>' +
+    clone.outerHTML + '</body></html>';
+};
+window.printBit2517 = () => {
+  let html;
+  try { html = bit2517PrintHtml(); } catch (e) { return alert(e.message || 'Open a BIT 2517 record first.'); }
+  const w = window.open('', '_blank');
+  if (!w) return alert('Allow pop-ups to print the BIT form.');
+  w.document.open(); w.document.write(html); w.document.close();
+  const go = () => { try { w.focus(); w.print(); } catch (e) {} };
+  if (w.document.readyState === 'complete') setTimeout(go, 50); else w.onload = go;
+};
+window.bit2517Pdf = async () => { /* used by tests; same letter page the user prints */
+  throw new Error('use print');
 };
 /*KBASE1 FleetLog Knowledge Base tab – NHTSA public data, OBDex CC0 codes, shop's own notes. No ALLDATA or Ford licensed content.*/
 window.KB = { d: null, loading: false, sr: null, dtc: null, msg: '' };
